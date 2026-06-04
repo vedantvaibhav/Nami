@@ -211,9 +211,9 @@ function EditMediaThumb({ item }) {
 
 // ---- the card --------------------------------------------------------------
 export default function MemoryCard({
-  m, x, w, editing, pxPerDay,
+  m, editing, canDrag,
   onEdit, onChange, onCommit, onCancel, onDelete, onMove, onOpen,
-  onAttach, onCycleColor, onSetDate, dragDateFor,
+  onAttach, onSetDate, dragDateFor,
 }) {
   const type = inferType(m)
   const color = COLORS[m.color] || COLORS.blue
@@ -239,24 +239,25 @@ export default function MemoryCard({
 
   return (
     <motion.div
-      key={`${m.id}-${m.date}-${m.y}`}
+      layout
+      key={`${m.id}-${m.date}`}
       className={`card ${isQuote ? 'card-quote' : ''} ${editing ? 'card-editing' : ''}`}
-      style={isQuote ? { left: x, top: m.y, width: w } : { left: x, top: m.y, width: w, background: color.bg }}
+      style={isQuote ? undefined : { background: color.bg }}
       initial={{ opacity: 0, scale: 0.95 }}
       animate={{ opacity: 1, scale: 1 }}
       exit={{ opacity: 0, scale: 0.9, transition: { duration: 0.15, ease: 'easeOut' } }}
       transition={{ type: 'spring', stiffness: 300, damping: 24 }}
-      drag={!editing}
+      drag={canDrag && !editing ? 'x' : false}
       dragListener={false}
       dragControls={dragControls}
       dragMomentum={false}
+      dragSnapToOrigin
       onDrag={(e, info) => {
         if (Math.abs(info.offset.x) > 4) setLiveDate(dragDateFor(m, info.offset.x))
       }}
       onDragEnd={(e, info) => {
         setLiveDate(null)
-        if (Math.abs(info.offset.x) > 3 || Math.abs(info.offset.y) > 3)
-          onMove(m.id, info.offset.x, info.offset.y)
+        if (Math.abs(info.offset.x) > 3) onMove(m.id, info.offset.x)
       }}
       onClick={(e) => {
         if (editing) return
@@ -270,18 +271,12 @@ export default function MemoryCard({
       {!editing && !isQuote && (
         <>
           <button className="card-delete" onClick={(e) => { e.stopPropagation(); onDelete(m.id) }} title="Delete">×</button>
-          {type === 'note' && (
-            <button
-              className="card-colordot"
-              style={{ background: color.text }}
-              onClick={(e) => { e.stopPropagation(); onCycleColor(m.id) }}
-              title="Change colour"
-            />
+          {canDrag && (
+            <span
+              className="card-grip"
+              onPointerDown={(e) => { e.stopPropagation(); dragControls.start(e) }}
+            ><Icon d={icons.grip} size={14} /></span>
           )}
-          <span
-            className="card-grip"
-            onPointerDown={(e) => { e.stopPropagation(); dragControls.start(e) }}
-          ><Icon d={icons.grip} size={14} /></span>
         </>
       )}
 

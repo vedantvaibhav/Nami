@@ -4,10 +4,9 @@ import MemoryCard, { Icon } from './MemoryCard.jsx'
 import YearOrbit from './YearOrbit.jsx'
 import Lightbox from './Lightbox.jsx'
 import Composer from './Composer.jsx'
-import { seedMemories } from './seed.js'
 import { loadMemories, saveMemories, saveImage, deleteImage, COLOR_KEYS } from './store.js'
 import { icons, kindFromMime, MAX_SAFE_BYTES } from './media.js'
-import { ZOOMS, getRange, getMarkers, xForDate, dateAtX, markerLabel, addDays, toISO, unitStart, colUnitDays, renderEnd, DAY } from './time.js'
+import { ZOOMS, markerLabel, addDays, toISO, fromISO, unitStart } from './time.js'
 
 const MARKER_H = 130 // px reserved at top for date markers
 // One shared, unhurried spring for everything the pill does — slow and liquidy
@@ -15,10 +14,12 @@ const LIQUID = { type: 'spring', stiffness: 170, damping: 26, mass: 1 }
 // The dock morph — each direction tuned separately
 const SHELL_OPEN = { type: 'spring', stiffness: 250, damping: 30, mass: 1 }      // lively, settles a bit quicker
 const SHELL_CLOSE = { type: 'spring', stiffness: 190, damping: 32, mass: 1.05 }  // slow, liquid settle
-const clampY = (y) => Math.max(MARKER_H + 20, Math.min(y, window.innerHeight - 220))
 
 // A card is worth keeping if it has a title, body, or any media
 const isEmpty = (m) => !m.title?.trim() && !m.body?.trim() && !(m.media?.length)
+
+const DAY_LIMIT = 3 // max memories per day
+const COL_W = 340 // fixed column width — populated dates lay out sequentially
 
 export default function App() {
   const [memories, setMemories] = useState(null)
@@ -33,8 +34,9 @@ export default function App() {
   const toolbarRef = useRef(null)
   const composerRef = useRef(null)
   const sizeMorph = useRef(false) // animate the shell size only during a composer open/close
-  const [dockDims, setDockDims] = useState({ toolbarW: 462, composerH: 290 })
-  const [dropHint, setDropHint] = useState(null) // clientX while dragging a file over
+  const [dockDims, setDockDims] = useState({ toolbarW: 462, composerH: 450 })
+  const [toast, setToast] = useState(null)
+  const toastTimer = useRef(null)
   const scrollRef = useRef(null)
   const colorCursor = useRef(Math.floor(Math.random() * COLOR_KEYS.length))
 
@@ -42,8 +44,9 @@ export default function App() {
 
   // ---- load / persist -------------------------------------------------
   useEffect(() => {
-    loadMemories().then(async (saved) => {
-      const list = saved && saved.length ? saved : await seedMemories()
+    loadMemories().then((saved) => {
+      // start empty — only days the user actually adds to will appear
+      const list = saved && saved.length ? saved : []
       // migrate legacy single-image cards (imgId) to the media[] model
       setMemories(
         list.map((m) =>
@@ -65,16 +68,26 @@ export default function App() {
     return () => clearTimeout(t)
   }, [memories])
 
-  // ---- timeline geometry ----------------------------------------------
-  const range = useMemo(() => getRange(memories || []), [memories])
-  // the canvas extends to the end of today's column at this zoom (full
-  // current month/year), but interactions clamp to today
-  const canvasEnd = useMemo(() => renderEnd(zoom.id), [zoom.id])
-  const widthPx = Math.ceil(((canvasEnd - range.start) / DAY) * zoom.pxPerDay)
-  const markers = useMemo(
-    () => getMarkers(range.start, canvasEnd, zoom.id),
-    [range.start.getTime(), canvasEnd.getTime(), zoom.id]
-  )
+  // ---- timeline geometry (sparse) -------------------------------------
+  // Only days/months that actually have memories become columns, laid out
+  // sequentially at a fixed width (Amie-style) — no empty dates in between.
+  const columns = useMemo(() => {
+    if (!memories) return []
+    const groups = new Map()
+    for (const m of memories) {
+      const k = unitStart(m.date, zoom.id)
+      if (!groups.has(k)) groups.set(k, [])
+      groups.get(k).push(m)
+    }
+    const keys = [...groups.keys()].sort() // ISO dates sort chronologically
+    return keys.map((k, i) => {
+      const items = groups.get(k)
+      items.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : (a.draft ? 1 : 0) - (b.draft ? 1 : 0)))
+      return { key: k, colX: i * COL_W, colW: COL_W, items }
+    })
+  }, [memories, zoom.id])
+
+  const widthPx = Math.max(columns.length * COL_W, 1)
 
   // start at the very end — today is the rightmost column.
   // useLayoutEffect so the pill is sized correctly BEFORE first paint
@@ -175,16 +188,19 @@ export default function App() {
   const pendingCenter = useRef(null)
   const setZoomKeepCenter = (idx) => {
     const el = scrollRef.current
-    if (el) pendingCenter.current = (el.scrollLeft + el.clientWidth / 2) / zoom.pxPerDay
+    // preserve scroll *fraction* across zooms (columns re-lay-out by count)
+    if (el) {
+      const maxScroll = el.scrollWidth - el.clientWidth
+      pendingCenter.current = maxScroll > 0 ? el.scrollLeft / maxScroll : 0
+    }
     setZoomIdx(idx)
   }
 
-  // restore the anchored center right after the canvas re-renders at the new
-  // scale — and only THEN morph the pill, so it lands where the view actually is
+  // restore the anchored fraction right after the canvas re-renders, then morph the pill
   useLayoutEffect(() => {
     const el = scrollRef.current
     if (el && pendingCenter.current !== null) {
-      el.scrollLeft = pendingCenter.current * zoom.pxPerDay - el.clientWidth / 2
+      el.scrollLeft = pendingCenter.current * (el.scrollWidth - el.clientWidth)
       pendingCenter.current = null
     }
     syncThumb(true)
@@ -237,18 +253,16 @@ export default function App() {
   const nextColor = () => COLOR_KEYS[colorCursor.current++ % COLOR_KEYS.length]
   const todayISO = () => toISO(new Date())
 
-  // Anchor date for a new card: today if its column is on-screen, else the
-  // nearest visible day. Timeline always reaches today, so today is the default.
-  const anchorDate = () => {
-    const el = scrollRef.current
-    if (!el) return todayISO()
-    const todayX = xForDate(todayISO(), range.start, zoom.pxPerDay)
-    const visible = todayX >= el.scrollLeft && todayX <= el.scrollLeft + el.clientWidth
-    if (visible) return todayISO()
-    const centerX = el.scrollLeft + el.clientWidth / 2
-    const iso = dateAtX(centerX, range.start, zoom.pxPerDay)
-    return iso > todayISO() ? todayISO() : iso
+  // how many real (non-draft) memories already sit on a date
+  const countOn = (iso) => memories.filter((m) => m.date === iso && !m.draft).length
+  const showToast = (msg) => {
+    setToast(msg)
+    clearTimeout(toastTimer.current)
+    toastTimer.current = setTimeout(() => setToast(null), 2400)
   }
+
+  // New cards default to today; the composer's date picker lets the user change it.
+  const anchorDate = () => todayISO()
 
   const blankCard = (date) => ({
     id: crypto.randomUUID(),
@@ -257,8 +271,6 @@ export default function App() {
     body: '',
     date,
     color: nextColor(),
-    y: clampY(window.innerHeight * 0.4),
-    tilt: 0,
     media: [],
     draft: true,
   })
@@ -275,19 +287,21 @@ export default function App() {
     setOpenId(null)
   }
 
-  // commit a finished memory from the morphing composer form
+  // commit a finished memory from the morphing composer form.
+  // name only -> quote; name + note -> coloured card; media -> photo/video/audio
   const addFromComposer = ({ title, body, date, time, media }) => {
+    if (countOn(date) >= DAY_LIMIT) { showToast(`Only ${DAY_LIMIT} memories per day`); return }
+    const hasMedia = media && media.length
+    const isQuote = !hasMedia && title && !body
     const card = {
       id: crypto.randomUUID(),
-      type: 'note',
+      type: isQuote ? 'quote' : 'note',
       title,
       body,
       date,
       time: time || null,
       media: media || [],
-      color: nextColor(),
-      y: clampY(window.innerHeight * 0.4),
-      tilt: 0,
+      color: nextColor(), // random, fixed — not user-changeable
     }
     setMemories((ms) => [...ms, card])
     sizeMorph.current = true
@@ -346,22 +360,21 @@ export default function App() {
     }
   }
 
-  const moveCard = (id, dx, dy) => {
-    setMemories((ms) =>
-      ms.map((m) => {
-        if (m.id !== id) return m
-        const days = Math.round(dx / zoom.pxPerDay)
-        const d = addDays(new Date(m.date + 'T00:00'), days)
-        let iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-        if (iso > todayISO()) iso = todayISO() // no future memories
-        return { ...m, date: iso, y: clampY(m.y + dy) }
-      })
-    )
+  // dragging a card horizontally re-dates it (Days view only); one column ≈ one day
+  const moveCard = (id, dx) => {
+    const target = memories.find((m) => m.id === id)
+    if (!target) return
+    const days = Math.round(dx / COL_W)
+    const d = addDays(new Date(target.date + 'T00:00'), days)
+    let iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+    if (iso > todayISO()) iso = todayISO() // no future memories
+    if (iso === target.date) return
+    if (countOn(iso) >= DAY_LIMIT) { showToast(`Only ${DAY_LIMIT} memories per day`); return }
+    setMemories((ms) => ms.map((m) => (m.id === id ? { ...m, date: iso } : m)))
   }
 
-  // live date label while dragging a card horizontally
   const dragDateFor = (m, dx) => {
-    const days = Math.round(dx / zoom.pxPerDay)
+    const days = Math.round(dx / COL_W)
     const d = addDays(new Date(m.date + 'T00:00'), days)
     let iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
     if (iso > todayISO()) iso = todayISO()
@@ -408,90 +421,56 @@ export default function App() {
   const openCard = memories.find((m) => m.id === openId)
 
   return (
-    <div
-      className="viewport"
-      onDragOver={(e) => { e.preventDefault(); setDropHint(e.clientX) }}
-      onDragLeave={() => setDropHint(null)}
-      onDrop={onDrop}
-    >
+    <div className="viewport" onDragOver={(e) => e.preventDefault()} onDrop={onDrop}>
       {zoom.id === 'years' ? (
         <YearOrbit memories={memories} year={new Date().getFullYear()} />
       ) : (
       <div className="scroller" ref={scrollRef}>
         <div className="canvas" style={{ width: widthPx }} onClick={onCanvasClick}>
           <div className="topline" />
-          {markers.map((d, i) => {
-            const x = Math.round(((d - range.start) / DAY) * zoom.pxPerDay)
-            const nextX =
-              i + 1 < markers.length
-                ? Math.round(((markers[i + 1] - range.start) / DAY) * zoom.pxPerDay)
-                : widthPx
+          {columns.map(({ key, colX }) => {
+            const d = fromISO(key)
             return (
-              <div key={d.getTime()}>
-                <div className="gridline" style={{ left: x }} />
-                <div className="marker" style={{ left: (x + nextX) / 2 }}>
-                  {zoom.id === 'years' ? (
-                    <div className="marker-day">{d.getFullYear()}</div>
-                  ) : (
-                    <>
-                      <div className="marker-day">{markerLabel(d, zoom.id)}</div>
-                      <div className="marker-year">{d.getFullYear()}</div>
-                    </>
-                  )}
+              <div key={`m-${key}`}>
+                <div className="gridline" style={{ left: colX }} />
+                <div className="marker" style={{ left: colX + COL_W / 2 }}>
+                  <div className="marker-day">{markerLabel(d, zoom.id)}</div>
+                  <div className="marker-year">{d.getFullYear()}</div>
                 </div>
               </div>
             )
           })}
 
-          <AnimatePresence>
-            {memories.map((m) => {
-              // cards snap into their day/month/year column, Amie-style:
-              // left edge at column start + inset, width fits the column
-              const colX = xForDate(unitStart(m.date, zoom.id), range.start, zoom.pxPerDay)
-              const colEnd = Math.min(
-                xForDate(unitStart(m.date, zoom.id), range.start, zoom.pxPerDay) +
-                  Math.round(colUnitDays(m.date, zoom.id) * zoom.pxPerDay),
-                widthPx
-              )
-              const cardW = Math.min(colEnd - colX - 16, 400)
-              return (
-              <MemoryCard
-                key={m.id}
-                m={m}
-                x={colX + 8}
-                w={cardW}
-                pxPerDay={zoom.pxPerDay}
-                editing={m.id === editingId}
-                onEdit={setEditing}
-                onChange={update}
-                onCommit={() => commitEditing(m.id)}
-                onCancel={() => cancelEditing(m.id)}
-                onDelete={removeMemory}
-                onMove={moveCard}
-                onOpen={setOpenId}
-                onAttach={attachFiles}
-                onCycleColor={cycleColor}
-                onSetDate={setCardDate}
-                dragDateFor={dragDateFor}
-              />
-              )
-            })}
-          </AnimatePresence>
+          {columns.map(({ key, colX, items }) => (
+            <div
+              key={key}
+              className="column"
+              style={{ left: colX + 8, top: MARKER_H + 20, width: COL_W - 16 }}
+            >
+              <AnimatePresence>
+                {items.map((m) => (
+                  <MemoryCard
+                    key={m.id}
+                    m={m}
+                    canDrag={zoom.id === 'days'}
+                    editing={m.id === editingId}
+                    onEdit={setEditing}
+                    onChange={update}
+                    onCommit={() => commitEditing(m.id)}
+                    onCancel={() => cancelEditing(m.id)}
+                    onDelete={removeMemory}
+                    onMove={moveCard}
+                    onOpen={setOpenId}
+                    onAttach={attachFiles}
+                    onSetDate={setCardDate}
+                    dragDateFor={dragDateFor}
+                  />
+                ))}
+              </AnimatePresence>
+            </div>
+          ))}
         </div>
       </div>
-      )}
-
-      {dropHint !== null && (
-        <div className="drop-line" style={{ left: dropHint }}>
-          <span className="drop-chip">
-            {markerLabel(
-              new Date(
-                dateAtX(dropHint + (scrollRef.current?.scrollLeft || 0), range.start, zoom.pxPerDay) + 'T00:00'
-              ),
-              'days'
-            )}
-          </span>
-        </div>
       )}
 
       <div className="dock-wrap">
@@ -511,7 +490,11 @@ export default function App() {
             // size only animates during an actual open/close morph; on load /
             // self-measurement it snaps instantly so the bar just appears
             width: sizeMorph.current ? (composerOpen ? SHELL_OPEN : SHELL_CLOSE) : { duration: 0 },
-            height: sizeMorph.current ? (composerOpen ? SHELL_OPEN : SHELL_CLOSE) : { duration: 0 },
+            // height: morph spring during open/close; while open, content changes
+            // (e.g. a photo is added) animate gently instead of jumping
+            height: sizeMorph.current
+              ? (composerOpen ? SHELL_OPEN : SHELL_CLOSE)
+              : (composerOpen ? { type: 'spring', stiffness: 300, damping: 30 } : { duration: 0 }),
           }}
           onAnimationComplete={() => { sizeMorph.current = false }}
         >
@@ -577,6 +560,20 @@ export default function App() {
           </motion.div>
         </motion.div>
       </div>
+
+      <AnimatePresence>
+        {toast && (
+          <motion.div
+            className="toast"
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 8 }}
+            transition={{ duration: 0.2, ease: 'easeOut' }}
+          >
+            {toast}
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <AnimatePresence>
         {openCard && <Lightbox key={openCard.id} m={openCard} onClose={() => setOpenId(null)} />}
