@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { AnimatePresence, Reorder, animate, motion, useMotionValue } from 'framer-motion'
-import MemoryCard, { Icon } from './MemoryCard.jsx'
+import { AnimatePresence, animate, motion, useMotionValue } from 'framer-motion'
+import MemoryCard from './MemoryCard.jsx'
 import YearOrbit from './YearOrbit.jsx'
 import Lightbox from './Lightbox.jsx'
 import Composer from './Composer.jsx'
 import { loadMemories, saveMemories, saveImage, deleteImage, COLOR_KEYS } from './store.js'
-import { icons, kindFromMime, MAX_SAFE_BYTES } from './media.js'
+import { kindFromMime, MAX_SAFE_BYTES } from './media.js'
 import { ZOOMS, markerLabel, addDays, toISO, fromISO, unitStart } from './time.js'
 
 const MARKER_H = 130 // px reserved at top for date markers
@@ -95,8 +95,7 @@ export default function App() {
     }
 
     return keys.map((k, i) => {
-      // stable sort by date — for same-day cards this preserves array order,
-      // which is the user's drag-reordered order
+      // chronological within a column (months can span several dates)
       const items = (groups.get(k) || []).slice().sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0))
       return { key: k, colX: i * COL_W, colW: COL_W, items }
     })
@@ -356,14 +355,6 @@ export default function App() {
     }
   }
 
-  // drag-to-reorder within a column: re-slot the dragged group's members
-  // into their new order while leaving every other card untouched
-  const reorderColumn = (newItems) => {
-    const ids = new Set(newItems.map((x) => x.id))
-    const queue = [...newItems]
-    setMemories((ms) => ms.map((m) => (ids.has(m.id) ? queue.shift() : m)))
-  }
-
   // ---- canvas interactions ----------------------------------------------
   const onCanvasClick = (e) => {
     if (e.target !== e.currentTarget) return
@@ -426,21 +417,16 @@ export default function App() {
           })}
 
           {columns.map(({ key, colX, items }) => (
-            <Reorder.Group
+            <div
               key={key}
-              as="div"
-              axis="y"
               className="column"
               style={{ left: colX + 8, top: MARKER_H + 20, width: COL_W - 16 }}
-              values={items}
-              onReorder={reorderColumn}
             >
               <AnimatePresence>
                 {items.map((m) => (
                   <MemoryCard
                     key={m.id}
                     m={m}
-                    canDrag={zoom.id !== 'years'}
                     editing={m.id === editingId}
                     onEdit={setEditing}
                     onChange={update}
@@ -453,7 +439,7 @@ export default function App() {
                   />
                 ))}
               </AnimatePresence>
-            </Reorder.Group>
+            </div>
           ))}
         </div>
       </div>

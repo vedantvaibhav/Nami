@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { motion, Reorder } from 'framer-motion'
+import { motion } from 'framer-motion'
 import { COLORS, imageURL } from './store.js'
 import { cardDateLabel, fromISO, toISO, startOfDay } from './time.js'
 import { ACCEPT, icons, inferType, seededBars, seededTilt, videoThumb } from './media.js'
@@ -34,9 +34,9 @@ export const Icon = ({ d, size = 16, stroke = 1.8, className = '' }) => (
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
 
 // ---- date chip + minimal month/day picker --------------------------------
-function DateChip({ m, color, editable, onSetDate, liveDate }) {
+function DateChip({ m, color, editable, onSetDate }) {
   const [open, setOpen] = useState(false)
-  const date = fromISO(liveDate || m.date)
+  const date = fromISO(m.date)
   const today = startOfDay(new Date())
   const year = date.getFullYear()
 
@@ -65,7 +65,7 @@ function DateChip({ m, color, editable, onSetDate, liveDate }) {
         style={{ color: color.text }}
         onClick={() => editable && setOpen(!open)}
       >
-        {cardDateLabel(liveDate || m.date)}
+        {cardDateLabel(m.date)}
       </button>
       {open && editable && (
         <div className="chip-picker">
@@ -227,7 +227,7 @@ function EditMediaThumb({ item }) {
 
 // ---- the card --------------------------------------------------------------
 export default function MemoryCard({
-  m, editing, canDrag,
+  m, editing,
   onEdit, onChange, onCommit, onCancel, onDelete, onOpen,
   onAttach, onSetDate,
 }) {
@@ -252,9 +252,7 @@ export default function MemoryCard({
   const hasMedia = (m.media || []).length > 0
 
   return (
-    <Reorder.Item
-      as="div"
-      value={m}
+    <motion.div
       layout
       className={`card ${isQuote ? 'card-quote' : ''} ${editing ? 'card-editing' : ''}`}
       style={isQuote ? undefined : { background: color.bg }}
@@ -262,22 +260,15 @@ export default function MemoryCard({
       animate={{ opacity: 1, scale: 1 }}
       exit={{ opacity: 0, scale: 0.9, transition: { duration: 0.15, ease: 'easeOut' } }}
       transition={{ type: 'spring', stiffness: 380, damping: 30 }}
-      dragListener={canDrag && !editing}
       onClick={(e) => {
         if (editing) return
         if (e.target.closest('button, input, select, textarea, .audio-pill, .chip-picker')) return
         if (type === 'note' || isQuote) onEdit(m.id)
         else onOpen(m.id)
       }}
-      whileDrag={{ scale: 1.04, zIndex: 50, boxShadow: '0 14px 32px rgba(20,20,40,0.16)', cursor: 'grabbing' }}
     >
       {!editing && (
-        <>
-          <button className="card-delete" onClick={(e) => { e.stopPropagation(); onDelete(m.id) }} title="Delete">×</button>
-          {canDrag && (
-            <span className="card-grip"><Icon d={icons.grip} size={14} /></span>
-          )}
-        </>
+        <button className="card-delete" onClick={(e) => { e.stopPropagation(); onDelete(m.id) }} title="Delete">×</button>
       )}
 
       {editing ? (
@@ -338,6 +329,6 @@ export default function MemoryCard({
           {m.saveError && <span className="error-badge" title="Failed to save media">!</span>}
         </>
       )}
-    </Reorder.Item>
+    </motion.div>
   )
 }
