@@ -21,6 +21,13 @@ const isEmpty = (m) => !m.title?.trim() && !m.body?.trim() && !(m.media?.length)
 const DAY_LIMIT = 3 // max memories per day
 const COL_W = 340 // fixed column width — populated dates lay out sequentially
 
+// stable per-column vertical offset so stacks land at varied heights (organic)
+const columnOffset = (key) => {
+  let h = 0
+  for (let i = 0; i < key.length; i++) h = ((h << 5) - h + key.charCodeAt(i)) | 0
+  return (Math.abs(h) % 13) * 11 // 0–132px, deterministic per date
+}
+
 export default function App() {
   const [memories, setMemories] = useState(null)
   const [zoomIdx, setZoomIdx] = useState(2) // open in Years view on load
@@ -68,9 +75,10 @@ export default function App() {
     return () => clearTimeout(t)
   }, [memories])
 
-  // ---- timeline geometry (sparse) -------------------------------------
-  // Only days/months that actually have memories become columns, laid out
-  // sequentially at a fixed width (Amie-style) — no empty dates in between.
+  // ---- timeline geometry ----------------------------------------------
+  // Days: sparse — only days with memories become columns.
+  // Months: continuous — every month from Jan of the earliest year through
+  // the current month (empty months show too), growing as time passes.
   const columns = useMemo(() => {
     if (!memories) return []
     const groups = new Map()
@@ -79,11 +87,24 @@ export default function App() {
       if (!groups.has(k)) groups.set(k, [])
       groups.get(k).push(m)
     }
-    const keys = [...groups.keys()].sort() // ISO dates sort chronologically
+
+    let keys
+    if (zoom.id === 'months') {
+      const today = new Date()
+      let earliestYear = today.getFullYear()
+      for (const m of memories) earliestYear = Math.min(earliestYear, fromISO(m.date).getFullYear())
+      keys = []
+      let d = new Date(earliestYear, 0, 1)
+      const end = new Date(today.getFullYear(), today.getMonth(), 1)
+      while (d <= end) { keys.push(toISO(d)); d = new Date(d.getFullYear(), d.getMonth() + 1, 1) }
+    } else {
+      keys = [...groups.keys()].sort() // ISO dates sort chronologically
+    }
+
     return keys.map((k, i) => {
-      const items = groups.get(k)
+      const items = (groups.get(k) || [])
       items.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : (a.draft ? 1 : 0) - (b.draft ? 1 : 0)))
-      return { key: k, colX: i * COL_W, colW: COL_W, items }
+      return { key: k, colX: i * COL_W, colW: COL_W, items, offset: columnOffset(k) }
     })
   }, [memories, zoom.id])
 
@@ -423,11 +444,11 @@ export default function App() {
             )
           })}
 
-          {columns.map(({ key, colX, items }) => (
+          {columns.map(({ key, colX, items, offset }) => (
             <div
               key={key}
               className="column"
-              style={{ left: colX + 8, top: MARKER_H + 20, width: COL_W - 16 }}
+              style={{ left: colX + 8, top: MARKER_H + 20 + offset, width: COL_W - 16 }}
             >
               <AnimatePresence>
                 {items.map((m) => (
