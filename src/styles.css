@@ -41,9 +41,12 @@ body {
 }
 
 /* ---- columns + cards ---- */
-.column { position: absolute; }
+.column {
+  position: absolute; list-style: none; margin: 0; padding: 0;
+  display: flex; flex-direction: column; gap: 14px;
+}
 .card {
-  position: absolute; left: 0; width: 100%;
+  position: relative; width: 100%;
   border-radius: 16px; padding: 16px 16px 14px;
   cursor: default; user-select: none;
   box-shadow: none;

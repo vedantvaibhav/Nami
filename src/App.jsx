@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { AnimatePresence, animate, motion, useMotionValue } from 'framer-motion'
+import { AnimatePresence, Reorder, animate, motion, useMotionValue } from 'framer-motion'
 import MemoryCard, { Icon } from './MemoryCard.jsx'
 import YearOrbit from './YearOrbit.jsx'
 import Lightbox from './Lightbox.jsx'
@@ -20,7 +20,6 @@ const isEmpty = (m) => !m.title?.trim() && !m.body?.trim() && !(m.media?.length)
 
 const DAY_LIMIT = 3 // max memories per day
 const COL_W = 340 // fixed column width — populated dates lay out sequentially
-const STACK_STEP = 52 // default vertical gap between cards added to the same date
 
 export default function App() {
   const [memories, setMemories] = useState(null)
@@ -96,8 +95,9 @@ export default function App() {
     }
 
     return keys.map((k, i) => {
-      const items = (groups.get(k) || [])
-      items.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : (a.draft ? 1 : 0) - (b.draft ? 1 : 0)))
+      // stable sort by date — for same-day cards this preserves array order,
+      // which is the user's drag-reordered order
+      const items = (groups.get(k) || []).slice().sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0))
       return { key: k, colX: i * COL_W, colW: COL_W, items }
     })
   }, [memories, zoom.id])
@@ -280,7 +280,6 @@ export default function App() {
     date,
     color: nextColor(),
     media: [],
-    y: countOn(date) * STACK_STEP, // first sticks to top; extras cascade down
     draft: true,
   })
 
@@ -299,7 +298,6 @@ export default function App() {
       time: time || null,
       media: media || [],
       color: nextColor(), // random, fixed — not user-changeable
-      y: countOn(date) * STACK_STEP, // first sticks to top; extras cascade down
     }
     setMemories((ms) => [...ms, card])
     sizeMorph.current = true
@@ -358,25 +356,12 @@ export default function App() {
     }
   }
 
-  // free drag: dx crosses columns (re-dates by day/month), dy sets the
-  // card's vertical position within its column — the user arranges freely
-  const moveCard = (id, dx, dy) => {
-    const target = memories.find((m) => m.id === id)
-    if (!target) return
-    let date = target.date
-    const steps = Math.round(dx / COL_W)
-    if (steps !== 0) {
-      const d = fromISO(target.date)
-      const nd = zoom.id === 'months'
-        ? new Date(d.getFullYear(), d.getMonth() + steps, d.getDate())
-        : addDays(d, steps)
-      let iso = toISO(nd)
-      if (iso > todayISO()) iso = todayISO()
-      if (iso !== target.date && countOn(iso) >= DAY_LIMIT) showToast(`Only ${DAY_LIMIT} memories per day`)
-      else date = iso
-    }
-    const y = Math.max(0, Math.round((target.y || 0) + dy))
-    setMemories((ms) => ms.map((m) => (m.id === id ? { ...m, date, y } : m)))
+  // drag-to-reorder within a column: re-slot the dragged group's members
+  // into their new order while leaving every other card untouched
+  const reorderColumn = (newItems) => {
+    const ids = new Set(newItems.map((x) => x.id))
+    const queue = [...newItems]
+    setMemories((ms) => ms.map((m) => (ids.has(m.id) ? queue.shift() : m)))
   }
 
   // ---- canvas interactions ----------------------------------------------
@@ -441,10 +426,14 @@ export default function App() {
           })}
 
           {columns.map(({ key, colX, items }) => (
-            <div
+            <Reorder.Group
               key={key}
+              as="div"
+              axis="y"
               className="column"
               style={{ left: colX + 8, top: MARKER_H + 20, width: COL_W - 16 }}
+              values={items}
+              onReorder={reorderColumn}
             >
               <AnimatePresence>
                 {items.map((m) => (
@@ -458,14 +447,13 @@ export default function App() {
                     onCommit={() => commitEditing(m.id)}
                     onCancel={() => cancelEditing(m.id)}
                     onDelete={removeMemory}
-                    onMove={moveCard}
                     onOpen={setOpenId}
                     onAttach={attachFiles}
                     onSetDate={setCardDate}
                   />
                 ))}
               </AnimatePresence>
-            </div>
+            </Reorder.Group>
           ))}
         </div>
       </div>

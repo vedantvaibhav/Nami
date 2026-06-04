@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { motion, useDragControls } from 'framer-motion'
+import { motion, Reorder, useDragControls } from 'framer-motion'
 import { COLORS, imageURL } from './store.js'
 import { cardDateLabel, fromISO, toISO, startOfDay } from './time.js'
 import { ACCEPT, icons, inferType, seededBars, seededTilt, videoThumb } from './media.js'
@@ -228,7 +228,7 @@ function EditMediaThumb({ item }) {
 // ---- the card --------------------------------------------------------------
 export default function MemoryCard({
   m, editing, canDrag,
-  onEdit, onChange, onCommit, onCancel, onDelete, onMove, onOpen,
+  onEdit, onChange, onCommit, onCancel, onDelete, onOpen,
   onAttach, onSetDate,
 }) {
   const type = inferType(m)
@@ -253,34 +253,27 @@ export default function MemoryCard({
   const hasMedia = (m.media || []).length > 0
 
   return (
-    <motion.div
+    <Reorder.Item
+      as="div"
+      value={m}
       layout
-      key={`${m.id}-${m.date}`}
       className={`card ${isQuote ? 'card-quote' : ''} ${editing ? 'card-editing' : ''}`}
-      style={isQuote ? { top: 8 + (m.y || 0) } : { top: 8 + (m.y || 0), background: color.bg }}
+      style={isQuote ? undefined : { background: color.bg }}
       initial={{ opacity: 0, scale: 0.95 }}
       animate={{ opacity: 1, scale: 1 }}
       exit={{ opacity: 0, scale: 0.9, transition: { duration: 0.15, ease: 'easeOut' } }}
-      transition={{ type: 'spring', stiffness: 300, damping: 24 }}
-      drag={canDrag && !editing}
+      transition={{ type: 'spring', stiffness: 380, damping: 30 }}
       dragListener={false}
       dragControls={dragControls}
-      dragMomentum={false}
-      dragSnapToOrigin
-      onDragEnd={(e, info) => {
-        if (Math.abs(info.offset.x) > 3 || Math.abs(info.offset.y) > 3)
-          onMove(m.id, info.offset.x, info.offset.y)
-      }}
       onClick={(e) => {
         if (editing) return
-        // ignore clicks on controls (delete, colour dot, chip, audio, etc.)
         if (e.target.closest('button, input, select, textarea, .audio-pill, .chip-picker')) return
         if (type === 'note' || isQuote) onEdit(m.id)
         else onOpen(m.id)
       }}
-      whileDrag={{ scale: 1.03, zIndex: 50, boxShadow: '0 12px 28px rgba(20,20,40,0.12)' }}
+      whileDrag={{ scale: 1.03, zIndex: 50, boxShadow: '0 12px 28px rgba(20,20,40,0.14)', cursor: 'grabbing' }}
     >
-      {!editing && !isQuote && (
+      {!editing && (
         <>
           <button className="card-delete" onClick={(e) => { e.stopPropagation(); onDelete(m.id) }} title="Delete">×</button>
           {canDrag && (
@@ -350,6 +343,6 @@ export default function MemoryCard({
           {m.saveError && <span className="error-badge" title="Failed to save media">!</span>}
         </>
       )}
-    </motion.div>
+    </Reorder.Item>
   )
 }
