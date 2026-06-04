@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { motion, Reorder, useDragControls } from 'framer-motion'
+import { motion, Reorder } from 'framer-motion'
 import { COLORS, imageURL } from './store.js'
 import { cardDateLabel, fromISO, toISO, startOfDay } from './time.js'
 import { ACCEPT, icons, inferType, seededBars, seededTilt, videoThumb } from './media.js'
@@ -234,7 +234,6 @@ export default function MemoryCard({
   const type = inferType(m)
   const color = COLORS[m.color] || COLORS.blue
   const titleRef = useRef(null)
-  const dragControls = useDragControls()
 
   useEffect(() => {
     if (editing && titleRef.current) {
@@ -263,24 +262,20 @@ export default function MemoryCard({
       animate={{ opacity: 1, scale: 1 }}
       exit={{ opacity: 0, scale: 0.9, transition: { duration: 0.15, ease: 'easeOut' } }}
       transition={{ type: 'spring', stiffness: 380, damping: 30 }}
-      dragListener={false}
-      dragControls={dragControls}
+      dragListener={canDrag && !editing}
       onClick={(e) => {
         if (editing) return
         if (e.target.closest('button, input, select, textarea, .audio-pill, .chip-picker')) return
         if (type === 'note' || isQuote) onEdit(m.id)
         else onOpen(m.id)
       }}
-      whileDrag={{ scale: 1.03, zIndex: 50, boxShadow: '0 12px 28px rgba(20,20,40,0.14)', cursor: 'grabbing' }}
+      whileDrag={{ scale: 1.04, zIndex: 50, boxShadow: '0 14px 32px rgba(20,20,40,0.16)', cursor: 'grabbing' }}
     >
       {!editing && (
         <>
           <button className="card-delete" onClick={(e) => { e.stopPropagation(); onDelete(m.id) }} title="Delete">×</button>
           {canDrag && (
-            <span
-              className="card-grip"
-              onPointerDown={(e) => { e.stopPropagation(); dragControls.start(e) }}
-            ><Icon d={icons.grip} size={14} /></span>
+            <span className="card-grip"><Icon d={icons.grip} size={14} /></span>
           )}
         </>
       )}

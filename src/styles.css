@@ -48,9 +48,11 @@ body {
 .card {
   position: relative; width: 100%;
   border-radius: 16px; padding: 16px 16px 14px;
-  cursor: default; user-select: none;
+  cursor: grab; user-select: none; touch-action: none;
   box-shadow: none;
 }
+.card:active { cursor: grabbing; }
+.card-editing, .card-editing:active { cursor: default; }
 .card:active { cursor: grabbing; }
 .card:hover .card-delete { opacity: 1; }
 
