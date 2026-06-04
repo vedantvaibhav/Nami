@@ -2,6 +2,7 @@
 // notes and quotes are painted onto offscreen canvases so *everything* is a card.
 import { COLORS, imageURL } from '../store.js'
 import { cardDateLabel } from '../time.js'
+import { inferType, firstImageId } from '../media.js'
 
 const wrapText = (ctx, text, maxWidth) => {
   const words = (text || '').split(/\s+/).filter(Boolean)
@@ -91,7 +92,7 @@ const imgDimensions = (url) =>
   })
 
 async function photoItem(m) {
-  const url = await imageURL(m.imgId)
+  const url = await imageURL(firstImageId(m))
   if (!url) return null
   const dims = await imgDimensions(url)
   return { url, ...dims }
@@ -102,10 +103,11 @@ export async function buildMediaItems(memories) {
   const items = []
   for (const m of memories) {
     if (m.draft) continue
+    const type = inferType(m)
     let item = null
-    if (m.type === 'photo' && m.imgId) item = await photoItem(m)
-    else if (m.type === 'quote') item = paintQuote(m)
-    else item = paintNote(m)
+    if (type === 'photo') item = await photoItem(m)
+    else if (type === 'quote') item = paintQuote(m)
+    else item = paintNote(m) // notes, video, audio → painted card
     if (item) items.push({ ...item, memory: m })
   }
   return items

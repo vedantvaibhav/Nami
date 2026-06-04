@@ -240,13 +240,6 @@ export default function App() {
     if (editingIdRef.current === id) setEditing(null)
   }, [setEditing])
 
-  const cycleColor = (id) =>
-    setMemories((ms) =>
-      ms.map((m) =>
-        m.id === id ? { ...m, color: COLOR_KEYS[(COLOR_KEYS.indexOf(m.color) + 1) % COLOR_KEYS.length] } : m
-      )
-    )
-
   const setCardDate = (id, iso) =>
     setMemories((ms) => ms.map((m) => (m.id === id ? { ...m, date: iso } : m)))
 
@@ -274,18 +267,6 @@ export default function App() {
     media: [],
     draft: true,
   })
-
-  // The + button: save any in-progress card, then spawn a fresh blank in edit mode
-  const addCard = (preMedia) => {
-    // Years view has no editable timeline yet — wiring TBD; show button only
-    if (zoom.id === 'years') return
-    if (editingIdRef.current) commitEditing()
-    const card = blankCard(anchorDate())
-    if (preMedia) card.media = preMedia
-    setMemories((ms) => [...ms, card])
-    setEditing(card.id)
-    setOpenId(null)
-  }
 
   // commit a finished memory from the morphing composer form.
   // name only -> quote; name + note -> coloured card; media -> photo/video/audio
@@ -389,11 +370,11 @@ export default function App() {
 
   const onDrop = async (e) => {
     e.preventDefault()
-    setDropHint(null)
     if (!scrollRef.current) return // orbit view: no drop target
     const files = [...(e.dataTransfer?.files || [])]
     if (!files.length) return
     if (editingIdRef.current) return attachFiles(editingIdRef.current, files)
+    if (countOn(anchorDate()) >= DAY_LIMIT) { showToast(`Only ${DAY_LIMIT} memories per day`); return }
     const card = blankCard(anchorDate())
     setMemories((ms) => [...ms, card])
     setEditing(card.id)
@@ -407,6 +388,7 @@ export default function App() {
       if (!item) return
       const file = item.getAsFile()
       if (editingIdRef.current) return attachFiles(editingIdRef.current, [file])
+      if (countOn(anchorDate()) >= DAY_LIMIT) { showToast(`Only ${DAY_LIMIT} memories per day`); return }
       const card = blankCard(anchorDate())
       setMemories((ms) => [...ms, card])
       setEditing(card.id)
@@ -414,7 +396,7 @@ export default function App() {
     }
     window.addEventListener('paste', onPaste)
     return () => window.removeEventListener('paste', onPaste)
-  })
+  }, [memories])
 
   if (!memories) return <div className="loading">…</div>
 

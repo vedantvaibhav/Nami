@@ -68,13 +68,6 @@ body {
 .card-delete:hover { background: #fff; color: #DC2626; }
 
 /* hover controls */
-.card-colordot {
-  position: absolute; top: 10px; right: 38px; z-index: 5;
-  width: 14px; height: 14px; border: 2px solid #fff; border-radius: 50%;
-  cursor: pointer; padding: 0; opacity: 0; transition: opacity 0.15s;
-  box-shadow: 0 0 0 1px rgba(20,20,40,0.12);
-}
-.card:hover .card-colordot { opacity: 1; }
 .card-grip {
   position: absolute; left: 1px; top: 50%; transform: translateY(-50%);
   color: #B3B8C2; opacity: 0; transition: opacity 0.15s;
