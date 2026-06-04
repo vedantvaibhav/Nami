@@ -4,57 +4,36 @@ import { cardDateLabel } from './time.js'
 import { fmtTime, icons, inferType, seededBars } from './media.js'
 import { Icon, useImage } from './MemoryCard.jsx'
 
-// ---- photo stack: big active image + fan-in thumbnail strip ----
+// ---- photo: all images shown at once, fanned and tilted (Amie-style) ----
 function PhotoExpand({ m }) {
   const images = m.media.filter((x) => x.kind === 'image')
-  const [activeId, setActiveId] = useState(images[0]?.id)
-  const mainUrl = useImage(activeId)
+  const n = images.length
   return (
-    <>
-      <div className="lb-main">
-        {mainUrl && (
-          <motion.img
-            key={activeId}
-            initial={{ opacity: 0.3, scale: 0.98 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.25, ease: 'easeOut' }}
-            src={mainUrl}
-            alt={m.title || 'memory'}
-          />
-        )}
-      </div>
-      {images.length > 1 && (
-        <motion.div
-          className="lb-strip"
-          initial="hidden"
-          animate="show"
-          variants={{ show: { transition: { staggerChildren: 0.05, delayChildren: 0.1 } } }}
-        >
-          {images.map((img, i) => (
-            <StripThumb key={img.id} id={img.id} index={i} active={img.id === activeId} onPick={() => setActiveId(img.id)} />
-          ))}
-        </motion.div>
-      )}
-    </>
+    <div className="lb-fan">
+      {images.map((img, i) => {
+        const mid = (n - 1) / 2
+        const rot = n === 1 ? -3 : (i - mid) * 7
+        const tx = n === 1 ? 0 : (i - mid) * 96
+        const ty = Math.abs(i - mid) * 12
+        return <FanImg key={img.id} id={img.id} i={i} rot={rot} tx={tx} ty={ty} />
+      })}
+    </div>
   )
 }
 
-function StripThumb({ id, index, active, onPick }) {
+function FanImg({ id, i, rot, tx, ty }) {
   const url = useImage(id)
   if (!url) return null
   return (
-    <motion.button
-      className={`lb-thumb ${active ? 'lb-thumb-active' : ''}`}
-      onClick={onPick}
-      variants={{
-        hidden: { opacity: 0, scale: 0.5, rotate: index % 2 ? 8 : -8, y: 14 },
-        show: { opacity: 1, scale: 1, rotate: 0, y: 0 },
-      }}
-      transition={{ type: 'spring', stiffness: 360, damping: 24 }}
-      whileHover={{ y: -3 }}
-    >
-      <img src={url} alt="" />
-    </motion.button>
+    <motion.img
+      className="lb-fan-img"
+      src={url}
+      alt=""
+      style={{ zIndex: i }}
+      initial={{ opacity: 0, rotate: 0, x: 0, y: 0, scale: 0.85 }}
+      animate={{ opacity: 1, rotate: rot, x: tx, y: ty, scale: 1 }}
+      transition={{ type: 'spring', stiffness: 240, damping: 22, delay: 0.06 * i }}
+    />
   )
 }
 
@@ -145,7 +124,26 @@ export default function Lightbox({ m, onClose }) {
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
 
-  const showMeta = type !== 'audio' // audio shows its own name/time row
+  // photos show just the images + a close button at the bottom (no text)
+  if (type === 'photo') {
+    return (
+      <motion.div
+        className="lb-backdrop"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        transition={{ duration: 0.15 }}
+        onClick={onClose}
+      >
+        <div className="lb-photo-wrap" onClick={(e) => e.stopPropagation()}>
+          <PhotoExpand m={m} />
+          <button className="lb-close-bottom" onClick={onClose} title="Close">
+            <Icon d={icons.close} size={20} />
+          </button>
+        </div>
+      </motion.div>
+    )
+  }
 
   return (
     <motion.div
@@ -167,14 +165,12 @@ export default function Lightbox({ m, onClose }) {
         <button className="lb-close icon-btn" onClick={onClose} title="Close">
           <Icon d={icons.close} size={18} />
         </button>
-        {type === 'photo' && <PhotoExpand m={m} />}
         {type === 'video' && <VideoExpand m={m} />}
         {type === 'audio' && <AudioExpand m={m} />}
-        {showMeta && (
+        {type === 'video' && (
           <div className="lb-meta">
             {m.title && <div className="lb-title">{m.title}</div>}
             <div className="lb-date">{cardDateLabel(m.date)}</div>
-            {m.body && <div className="lb-body">{m.body}</div>}
           </div>
         )}
       </motion.div>

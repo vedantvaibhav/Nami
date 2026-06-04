@@ -20,13 +20,7 @@ const isEmpty = (m) => !m.title?.trim() && !m.body?.trim() && !(m.media?.length)
 
 const DAY_LIMIT = 3 // max memories per day
 const COL_W = 340 // fixed column width — populated dates lay out sequentially
-
-// stable per-column vertical offset so stacks land at varied heights (organic)
-const columnOffset = (key) => {
-  let h = 0
-  for (let i = 0; i < key.length; i++) h = ((h << 5) - h + key.charCodeAt(i)) | 0
-  return (Math.abs(h) % 13) * 11 // 0–132px, deterministic per date
-}
+const STACK_STEP = 52 // default vertical gap between cards added to the same date
 
 export default function App() {
   const [memories, setMemories] = useState(null)
@@ -104,7 +98,7 @@ export default function App() {
     return keys.map((k, i) => {
       const items = (groups.get(k) || [])
       items.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : (a.draft ? 1 : 0) - (b.draft ? 1 : 0)))
-      return { key: k, colX: i * COL_W, colW: COL_W, items, offset: columnOffset(k) }
+      return { key: k, colX: i * COL_W, colW: COL_W, items }
     })
   }, [memories, zoom.id])
 
@@ -286,6 +280,7 @@ export default function App() {
     date,
     color: nextColor(),
     media: [],
+    y: countOn(date) * STACK_STEP, // first sticks to top; extras cascade down
     draft: true,
   })
 
@@ -304,6 +299,7 @@ export default function App() {
       time: time || null,
       media: media || [],
       color: nextColor(), // random, fixed — not user-changeable
+      y: countOn(date) * STACK_STEP, // first sticks to top; extras cascade down
     }
     setMemories((ms) => [...ms, card])
     sizeMorph.current = true
@@ -362,25 +358,25 @@ export default function App() {
     }
   }
 
-  // dragging a card horizontally re-dates it (Days view only); one column ≈ one day
-  const moveCard = (id, dx) => {
+  // free drag: dx crosses columns (re-dates by day/month), dy sets the
+  // card's vertical position within its column — the user arranges freely
+  const moveCard = (id, dx, dy) => {
     const target = memories.find((m) => m.id === id)
     if (!target) return
-    const days = Math.round(dx / COL_W)
-    const d = addDays(new Date(target.date + 'T00:00'), days)
-    let iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-    if (iso > todayISO()) iso = todayISO() // no future memories
-    if (iso === target.date) return
-    if (countOn(iso) >= DAY_LIMIT) { showToast(`Only ${DAY_LIMIT} memories per day`); return }
-    setMemories((ms) => ms.map((m) => (m.id === id ? { ...m, date: iso } : m)))
-  }
-
-  const dragDateFor = (m, dx) => {
-    const days = Math.round(dx / COL_W)
-    const d = addDays(new Date(m.date + 'T00:00'), days)
-    let iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-    if (iso > todayISO()) iso = todayISO()
-    return iso
+    let date = target.date
+    const steps = Math.round(dx / COL_W)
+    if (steps !== 0) {
+      const d = fromISO(target.date)
+      const nd = zoom.id === 'months'
+        ? new Date(d.getFullYear(), d.getMonth() + steps, d.getDate())
+        : addDays(d, steps)
+      let iso = toISO(nd)
+      if (iso > todayISO()) iso = todayISO()
+      if (iso !== target.date && countOn(iso) >= DAY_LIMIT) showToast(`Only ${DAY_LIMIT} memories per day`)
+      else date = iso
+    }
+    const y = Math.max(0, Math.round((target.y || 0) + dy))
+    setMemories((ms) => ms.map((m) => (m.id === id ? { ...m, date, y } : m)))
   }
 
   // ---- canvas interactions ----------------------------------------------
@@ -444,18 +440,18 @@ export default function App() {
             )
           })}
 
-          {columns.map(({ key, colX, items, offset }) => (
+          {columns.map(({ key, colX, items }) => (
             <div
               key={key}
               className="column"
-              style={{ left: colX + 8, top: MARKER_H + 20 + offset, width: COL_W - 16 }}
+              style={{ left: colX + 8, top: MARKER_H + 20, width: COL_W - 16 }}
             >
               <AnimatePresence>
                 {items.map((m) => (
                   <MemoryCard
                     key={m.id}
                     m={m}
-                    canDrag={zoom.id === 'days'}
+                    canDrag={zoom.id !== 'years'}
                     editing={m.id === editingId}
                     onEdit={setEditing}
                     onChange={update}
@@ -466,7 +462,6 @@ export default function App() {
                     onOpen={setOpenId}
                     onAttach={attachFiles}
                     onSetDate={setCardDate}
-                    dragDateFor={dragDateFor}
                   />
                 ))}
               </AnimatePresence>

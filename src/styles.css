@@ -41,14 +41,11 @@ body {
 }
 
 /* ---- columns + cards ---- */
-.column {
-  position: absolute;
-  display: flex; flex-direction: column; gap: 14px;
-}
+.column { position: absolute; }
 .card {
-  position: relative; width: 100%;
+  position: absolute; left: 0; width: 100%;
   border-radius: 16px; padding: 16px 16px 14px;
-  cursor: grab; user-select: none;
+  cursor: default; user-select: none;
   box-shadow: none;
 }
 .card:active { cursor: grabbing; }
@@ -107,11 +104,16 @@ body {
   object-fit: cover; border-radius: 12px; margin-top: 12px; pointer-events: none;
 }
 .photo-stack { position: relative; margin-top: 16px; }
-.stack-under {
-  position: absolute; inset: 0; background: #fff; border-radius: 12px;
-  box-shadow: 0 2px 8px rgba(20,20,40,0.08); transform-origin: center;
+.stack-under-img {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  object-fit: cover; border-radius: 10px;
+  border: 4px solid #fff; box-shadow: 0 4px 14px rgba(20,20,40,0.16);
+  transform-origin: center; pointer-events: none;
 }
-.stack-top { margin-top: 0; position: relative; }
+.stack-top {
+  margin-top: 0; position: relative; z-index: 2;
+  border: 4px solid #fff; box-shadow: 0 4px 14px rgba(20,20,40,0.16);
+}
 .stack-count {
   position: absolute; bottom: 8px; right: 8px; z-index: 3;
   background: rgba(20,20,30,0.62); color: #fff; font-size: 11px; font-weight: 600;
@@ -325,12 +327,27 @@ body {
 }
 .lb-volume:hover { background: rgba(20,20,30,0.75); }
 
-.lb-strip {
-  display: flex; gap: 8px; max-width: 760px; overflow-x: auto; padding: 6px 2px;
+/* photo fan: all images at once, tilted + overlapping */
+.lb-photo-wrap {
+  display: flex; flex-direction: column; align-items: center; gap: 28px;
 }
-.lb-thumb { border: 2px solid transparent; border-radius: 10px; padding: 0; cursor: pointer; background: none; flex-shrink: 0; }
-.lb-thumb img { width: 64px; height: 64px; object-fit: cover; border-radius: 8px; display: block; }
-.lb-thumb-active { border-color: #fff; }
+.lb-fan {
+  position: relative; display: grid; place-items: center;
+  width: min(760px, 86vw); height: 62vh;
+}
+.lb-fan-img {
+  position: absolute;
+  max-width: 60%; max-height: 58vh; object-fit: cover;
+  border: 7px solid #fff; border-radius: 6px;
+  box-shadow: 0 14px 40px rgba(0,0,0,0.35);
+}
+.lb-close-bottom {
+  width: 48px; height: 48px; border: none; border-radius: 50%;
+  background: #fff; color: #16181D; cursor: pointer;
+  display: grid; place-items: center;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.25);
+}
+.lb-close-bottom:hover { background: #F2F3F5; }
 .lb-meta { text-align: center; color: #fff; max-width: 600px; }
 .lb-title { font-size: 18px; font-weight: 600; }
 .lb-date { font-size: 11px; font-weight: 600; letter-spacing: 0.08em; opacity: 0.7; margin-top: 6px; }

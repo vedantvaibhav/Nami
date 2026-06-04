@@ -87,6 +87,32 @@ function DateChip({ m, color, editable, onSetDate, liveDate }) {
 }
 
 // ---- media renderers -------------------------------------------------------
+function StackPhoto({ id, seed, i, top }) {
+  const url = useImage(id)
+  if (!url) return null
+  if (top) {
+    return (
+      <img
+        className="card-photo stack-top"
+        style={{ transform: `rotate(${seededTilt(seed, 0, 2.5)}deg)` }}
+        src={url}
+        alt=""
+        draggable={false}
+      />
+    )
+  }
+  const rot = seededTilt(seed, i, 7)
+  return (
+    <img
+      className="stack-under-img"
+      style={{ transform: `rotate(${rot}deg) translate(${i * 7}px, ${i * 9}px)`, zIndex: -i }}
+      src={url}
+      alt=""
+      draggable={false}
+    />
+  )
+}
+
 function PhotoBlock({ m }) {
   const images = m.media.filter((x) => x.kind === 'image')
   const topUrl = useImage(images[0]?.id)
@@ -98,19 +124,9 @@ function PhotoBlock({ m }) {
   return (
     <div className="photo-stack">
       {under.map((img, i) => (
-        <div
-          key={img.id}
-          className="stack-under"
-          style={{ transform: `rotate(${seededTilt(m.id, i + 1)}deg) translateY(${(i + 1) * 4}px)` }}
-        />
+        <StackPhoto key={img.id} id={img.id} seed={m.id} i={i + 1} />
       ))}
-      <img
-        className="card-photo stack-top"
-        style={{ transform: `rotate(${seededTilt(m.id, 0, 2)}deg)` }}
-        src={topUrl}
-        alt={m.title || 'memory'}
-        draggable={false}
-      />
+      <StackPhoto id={images[0].id} seed={m.id} top />
       <span className="stack-count">{images.length}</span>
     </div>
   )
@@ -213,13 +229,12 @@ function EditMediaThumb({ item }) {
 export default function MemoryCard({
   m, editing, canDrag,
   onEdit, onChange, onCommit, onCancel, onDelete, onMove, onOpen,
-  onAttach, onSetDate, dragDateFor,
+  onAttach, onSetDate,
 }) {
   const type = inferType(m)
   const color = COLORS[m.color] || COLORS.blue
   const titleRef = useRef(null)
   const dragControls = useDragControls()
-  const [liveDate, setLiveDate] = useState(null)
 
   useEffect(() => {
     if (editing && titleRef.current) {
@@ -242,22 +257,19 @@ export default function MemoryCard({
       layout
       key={`${m.id}-${m.date}`}
       className={`card ${isQuote ? 'card-quote' : ''} ${editing ? 'card-editing' : ''}`}
-      style={isQuote ? undefined : { background: color.bg }}
+      style={isQuote ? { top: 8 + (m.y || 0) } : { top: 8 + (m.y || 0), background: color.bg }}
       initial={{ opacity: 0, scale: 0.95 }}
       animate={{ opacity: 1, scale: 1 }}
       exit={{ opacity: 0, scale: 0.9, transition: { duration: 0.15, ease: 'easeOut' } }}
       transition={{ type: 'spring', stiffness: 300, damping: 24 }}
-      drag={canDrag && !editing ? 'x' : false}
+      drag={canDrag && !editing}
       dragListener={false}
       dragControls={dragControls}
       dragMomentum={false}
       dragSnapToOrigin
-      onDrag={(e, info) => {
-        if (Math.abs(info.offset.x) > 4) setLiveDate(dragDateFor(m, info.offset.x))
-      }}
       onDragEnd={(e, info) => {
-        setLiveDate(null)
-        if (Math.abs(info.offset.x) > 3) onMove(m.id, info.offset.x)
+        if (Math.abs(info.offset.x) > 3 || Math.abs(info.offset.y) > 3)
+          onMove(m.id, info.offset.x, info.offset.y)
       }}
       onClick={(e) => {
         if (editing) return
@@ -326,7 +338,6 @@ export default function MemoryCard({
       ) : (
         <>
           {m.title && <div className="card-title" style={{ color: color.text }}>{m.title}</div>}
-          <DateChip m={m} color={color} editable={false} onSetDate={() => {}} liveDate={liveDate} />
           {type === 'photo' && <PhotoBlock m={m} />}
           {type === 'video' && <VideoBlock m={m} />}
           {type === 'audio' && (
