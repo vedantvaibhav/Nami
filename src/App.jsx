@@ -377,11 +377,10 @@ export default function App() {
       {/* hidden layers stay opacity-0 but PAINTED — flipping visibility forced a
           full timeline repaint in the same frame the pill morph starts (hitch) */}
       <motion.div
-        className="view-layer"
+        className={`view-layer ${isYears ? 'view-layer-off' : ''}`}
         initial={false}
         animate={isYears ? { opacity: 0, scale: 0.97 } : { opacity: 1, scale: 1 }}
         transition={VIEW_SWAP}
-        style={{ pointerEvents: isYears ? 'none' : 'auto' }}
       >
       <div className="scroller" ref={scrollRef}>
         <div className="canvas" style={{ width: widthPx }}>
@@ -423,11 +422,10 @@ export default function App() {
       </motion.div>
 
       <motion.div
-        className="view-layer"
+        className={`view-layer ${isYears ? '' : 'view-layer-off'}`}
         initial={false}
         animate={isYears ? { opacity: 1, scale: 1 } : { opacity: 0, scale: 1.03 }}
         transition={VIEW_SWAP}
-        style={{ pointerEvents: isYears ? 'auto' : 'none' }}
       >
         <YearOrbit memories={memories} active={isYears} />
       </motion.div>
