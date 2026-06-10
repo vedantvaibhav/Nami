@@ -117,11 +117,17 @@ tracks scroll, and you can drag it. See `syncThumb` / `thumbX` / `thumbWmv`.
 - **Colours are fixed at creation** (truly random from the palette), not user-changeable.
   Card title text always uses the matching `color.text` hue of its pastel `color.bg`.
 - **Icon buttons follow the `.icon-btn` pattern**: no fill at rest, fill on hover/active.
-- **Fonts**: UI is `system-ui`; **quotes are handwritten `Caveat`** rendered as a pinned
-  note — colour strips behind each line (`box-decoration-break: clone`) + two pin dots,
-  using the memory's palette colour. Same treatment painted in the orbit (`paintQuote`).
-- **Photo expand = overlapping collage** (`COLLAGE` slot layouts in `Lightbox.jsx`,
-  up to 4 prints, % positions + rotations), not a side-by-side strip.
+- **Fonts**: UI is `system-ui`; card titles are weight 500; **quotes are handwritten
+  `Caveat`** rendered as highlight strips (`box-decoration-break: clone`) in the memory's
+  palette colour — no pins. Same treatment painted in the orbit (`paintQuote`).
+- **Card text order**: title → body/note → media. Title is tinted
+  `color-mix(text 78%, white)`, body `color-mix(text 60%, white)` — always the card's hue.
+- **Multi-photo cards = polaroid row** (`CLUSTER` in `MemoryCard.jsx`): up to 3 square
+  white-framed prints side by side, overlapping edges, seeded tilts.
+- **Photo expand = spread collage** (`COLLAGE` slots in `Lightbox.jsx`, up to 4 prints,
+  minimal overlap so every print stays visible).
+- **Scattered placement**: every card gets a stable seeded `marginTop` (`seedFrac`) so
+  columns start/flow at varied heights — organic, deterministic, never overlapping.
 - **Tilts/waveforms are seeded by id** (`seededTilt`, `seededBars`) so they're stable
   across reloads.
 - **The bottom dock morphs** between the toolbar and the composer via measured

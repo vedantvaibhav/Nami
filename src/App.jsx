@@ -448,10 +448,11 @@ export default function App() {
               style={{ left: colX + 8, top: MARKER_H + 20, width: COL_W - 16 }}
             >
               <AnimatePresence>
-                {items.map((m) => (
+                {items.map((m, idx) => (
                   <MemoryCard
                     key={m.id}
                     m={m}
+                    index={idx}
                     editing={m.id === editingId}
                     onEdit={setEditing}
                     onChange={update}

@@ -6,22 +6,23 @@ import { Icon, useImage } from './MemoryCard.jsx'
 
 // ---- photo: overlapping collage of prints (Amie "Meet Eric/Antoine" style) ----
 // slot layouts per image count: % positions of each print's centre + rotation
+// spread out so every print stays visible — edges may kiss, never bury
 const COLLAGE = {
-  1: [{ left: 50, top: 50, w: 72, r: -2, z: 1 }],
+  1: [{ left: 50, top: 50, w: 68, r: -2, z: 1 }],
   2: [
-    { left: 40, top: 44, w: 58, r: -4, z: 2 },
-    { left: 63, top: 58, w: 54, r: 3, z: 1 },
+    { left: 29, top: 47, w: 44, r: -3, z: 2 },
+    { left: 70, top: 54, w: 44, r: 3, z: 1 },
   ],
   3: [
-    { left: 37, top: 35, w: 54, r: -3, z: 2 },
-    { left: 66, top: 41, w: 52, r: 3, z: 1 },
-    { left: 45, top: 69, w: 50, r: -5, z: 3 },
+    { left: 25, top: 33, w: 40, r: -3, z: 2 },
+    { left: 73, top: 37, w: 40, r: 3, z: 1 },
+    { left: 47, top: 71, w: 40, r: -4, z: 3 },
   ],
   4: [
-    { left: 34, top: 33, w: 50, r: -3, z: 2 },
-    { left: 67, top: 36, w: 48, r: 4, z: 1 },
-    { left: 38, top: 69, w: 46, r: -5, z: 3 },
-    { left: 69, top: 66, w: 46, r: 6, z: 2 },
+    { left: 25, top: 29, w: 38, r: -3, z: 2 },
+    { left: 74, top: 32, w: 38, r: 3, z: 1 },
+    { left: 27, top: 73, w: 36, r: -5, z: 3 },
+    { left: 73, top: 70, w: 36, r: 5, z: 2 },
   ],
 }
 

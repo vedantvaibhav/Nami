@@ -31,6 +31,13 @@ export const seededTilt = (id, i = 0, range = 4) => {
   return +((((Math.abs(h) % 1000) / 1000) * 2 - 1) * range).toFixed(2)
 }
 
+// Deterministic 0..1 fraction from any string — for stable "random" layout
+export const seedFrac = (s) => {
+  let h = 0
+  for (let k = 0; k < s.length; k++) h = ((h << 5) - h + s.charCodeAt(k)) | 0
+  return (Math.abs(h) % 1000) / 1000
+}
+
 // Deterministic waveform bars from id — visual chrome, not real data
 export const seededBars = (id, count = 28) => {
   const bars = []

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
 import { COLORS, imageURL } from './store.js'
 import { cardDateLabel, fromISO, toISO, startOfDay } from './time.js'
-import { ACCEPT, icons, inferType, seededBars, seededTilt, videoThumb } from './media.js'
+import { ACCEPT, icons, inferType, seededBars, seededTilt, seedFrac, videoThumb } from './media.js'
 
 export function useImage(imgId) {
   const [url, setUrl] = useState(null)
@@ -87,51 +87,45 @@ function DateChip({ m, color, editable, onSetDate }) {
 }
 
 // ---- media renderers -------------------------------------------------------
-function StackPhoto({ id, seed, i, top }) {
+function ClusterImg({ id, style }) {
   const url = useImage(id)
   if (!url) return null
-  if (top) {
-    return (
-      <img
-        className="card-photo stack-top"
-        style={{ transform: `rotate(${seededTilt(seed, 0, 2.5)}deg)` }}
-        src={url}
-        alt=""
-        draggable={false}
-      />
-    )
-  }
-  // under-photos peek out on alternating sides, slightly scaled down + tilted
-  const dir = i % 2 ? 1 : -1
-  const rot = dir * (4 + Math.abs(seededTilt(seed, i, 3)))
-  return (
-    <img
-      className="stack-under-img"
-      style={{
-        transform: `translate(${dir * 4}%, ${dir * -2.5}%) rotate(${rot}deg) scale(0.96)`,
-        zIndex: -i,
-      }}
-      src={url}
-      alt=""
-      draggable={false}
-    />
-  )
+  return <img className="cluster-img" style={style} src={url} alt="" draggable={false} />
+}
+
+// multiple photos lay side by side as overlapping tilted polaroids (reference look)
+const CLUSTER = {
+  2: { w: 58, lefts: [0, 42], z: [1, 2], h: 200 },
+  3: { w: 46, lefts: [0, 27, 54], z: [1, 3, 2], h: 165 },
 }
 
 function PhotoBlock({ m }) {
-  const images = m.media.filter((x) => x.kind === 'image')
+  const images = m.media.filter((x) => x.kind === 'image').slice(0, 3)
   const topUrl = useImage(images[0]?.id)
   if (!topUrl) return null
   if (images.length === 1) {
     return <img className="card-photo" src={topUrl} alt={m.title || 'memory'} draggable={false} />
   }
-  const under = images.slice(1, 3)
+  const lay = CLUSTER[images.length] || CLUSTER[3]
   return (
-    <div className="photo-stack">
-      {under.map((img, i) => (
-        <StackPhoto key={img.id} id={img.id} seed={m.id} i={i + 1} />
-      ))}
-      <StackPhoto id={images[0].id} seed={m.id} top />
+    <div className="photo-cluster" style={{ height: lay.h }}>
+      {images.map((img, i) => {
+        const rot = seededTilt(m.id, i, 4)
+        const jig = i % 2 ? 10 : 0
+        return (
+          <ClusterImg
+            key={img.id}
+            id={img.id}
+            style={{
+              left: `${lay.lefts[i]}%`,
+              width: `${lay.w}%`,
+              top: jig,
+              zIndex: lay.z[i],
+              transform: `rotate(${rot}deg)`,
+            }}
+          />
+        )
+      })}
     </div>
   )
 }
@@ -231,13 +225,18 @@ function EditMediaThumb({ item }) {
 
 // ---- the card --------------------------------------------------------------
 export default function MemoryCard({
-  m, editing,
+  m, editing, index = 0,
   onEdit, onChange, onCommit, onCancel, onDelete, onOpen,
   onAttach, onSetDate,
 }) {
   const type = inferType(m)
   const color = COLORS[m.color] || COLORS.blue
   const titleRef = useRef(null)
+  // scattered placement: each card lands at a stable seeded height in its
+  // column — the first somewhere near the top, the rest spaced further down
+  const scatter = index === 0
+    ? Math.round(seedFrac(m.id + ':y') * 200)
+    : Math.round(seedFrac(m.id + ':y') * 120)
 
   useEffect(() => {
     if (editing && titleRef.current) {
@@ -259,7 +258,7 @@ export default function MemoryCard({
     <motion.div
       layout
       className={`card ${isQuote ? 'card-quote' : ''} ${editing ? 'card-editing' : ''}`}
-      style={isQuote ? undefined : { background: color.bg }}
+      style={isQuote ? { marginTop: scatter } : { marginTop: scatter, background: color.bg }}
       initial={{ opacity: 0, scale: 0.95 }}
       animate={{ opacity: 1, scale: 1 }}
       exit={{ opacity: 0, scale: 0.9, transition: { duration: 0.15, ease: 'easeOut' } }}
@@ -280,7 +279,7 @@ export default function MemoryCard({
           <textarea
             ref={titleRef}
             className={isQuote ? 'edit-quote' : 'edit-title'}
-            style={isQuote ? undefined : { color: color.text }}
+            style={isQuote ? undefined : { color: `color-mix(in srgb, ${color.text} 78%, #fff)` }}
             value={m.title}
             rows={1}
             placeholder={isQuote ? 'A line worth remembering…' : 'Name this moment'}
@@ -318,15 +317,22 @@ export default function MemoryCard({
         </>
       ) : isQuote ? (
         <div className="quote-note">
-          <span className="quote-pin quote-pin-top" style={{ background: color.text }} />
           <span className="quote-strips" style={{ backgroundColor: color.bg, color: color.text }}>
             {m.title || '…'}
           </span>
-          <span className="quote-pin quote-pin-bottom" style={{ background: color.text }} />
         </div>
       ) : (
         <>
-          {m.title && <div className="card-title" style={{ color: color.text }}>{m.title}</div>}
+          {m.title && (
+            <div className="card-title" style={{ color: `color-mix(in srgb, ${color.text} 78%, #fff)` }}>
+              {m.title}
+            </div>
+          )}
+          {m.body && (
+            <div className="card-body" style={{ color: `color-mix(in srgb, ${color.text} 60%, #fff)` }}>
+              {m.body}
+            </div>
+          )}
           {type === 'photo' && <PhotoBlock m={m} />}
           {type === 'video' && <VideoBlock m={m} />}
           {type === 'audio' && (
@@ -335,7 +341,6 @@ export default function MemoryCard({
               <div className="audio-name">{m.media.find((i) => i.kind === 'audio')?.name}</div>
             </>
           )}
-          {m.body && <div className="card-body">{m.body}</div>}
           {m.saveError && <span className="error-badge" title="Failed to save media">!</span>}
         </>
       )}

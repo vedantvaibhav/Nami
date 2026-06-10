@@ -95,15 +95,6 @@ function paintQuote(m) {
     ctx.fillText(l, W / 2 + s.j, startY + i * lineH)
   })
 
-  // two pins: top-left of the first strip, bottom-right of the last
-  const first = stripFor(lines[0], 0)
-  const last = stripFor(lines[lines.length - 1], lines.length - 1)
-  ctx.fillStyle = color.text
-  ctx.beginPath()
-  ctx.arc(first.x + 4, first.y - 2, 12, 0, Math.PI * 2)
-  ctx.arc(last.x + last.w - 4, last.y + last.h + 2, 12, 0, Math.PI * 2)
-  ctx.fill()
-
   return { url: c.toDataURL('image/png'), width: W, height: H }
 }
 
