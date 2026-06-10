@@ -95,9 +95,10 @@ In `App.jsx`, the `columns` memo turns `memories` into positioned columns:
 **Both views are ALWAYS mounted** as stacked `.view-layer`s in `App.jsx` and cross-fade
 on zoom change (0.3s, slight scale). This is deliberate: remounting the 3D canvas on
 every Months↔Years switch (WebGL context + shader compile + texture builds) caused
-visible lag. The hidden layer gets `visibility: hidden` + `pointer-events: none`, and
-the orbit's R3F `frameloop` flips to `'never'` (via the `active` prop chain
-`App → YearOrbit → InfiniteMemoryCanvas`) so it costs nothing while inactive.
+visible lag. The hidden layer is **opacity-0 but stays painted** (`pointer-events: none`; do NOT
+flip `visibility` — that forces a full repaint in the same frame the pill morph starts
+and causes a visible hitch), and the orbit's R3F `frameloop` flips to `'never'` (via the
+`active` prop chain `App → YearOrbit → InfiniteMemoryCanvas`) so it costs ~nothing idle.
 Consequences to respect:
 - `scrollRef` is **never null** anymore — gate orbit-vs-timeline logic on the zoom
   (see `zoomIdRef` used by `syncThumb`, and the `zoom.id === 'years'` check in `onDrop`).
@@ -127,8 +128,9 @@ tracks scroll, and you can drag it. See `syncThumb` / `thumbX` / `thumbWmv`.
 - **Photo expand = spread collage** (`COLLAGE` slots in `Lightbox.jsx`, up to 4 prints,
   minimal overlap so every print stays visible).
 - **Scattered placement**: cards are **mostly top-anchored** — the first card in a column
-  has `marginTop: 0` ~70% of the time, occasionally dropping to ~140–260px; later cards
-  add a seeded 24–72px gap. Stable per card (`seedFrac`), never overlapping.
+  has `marginTop: 0` ~70% of the time, occasionally dropping to ~140–260px. Consecutive
+  cards keep ONE uniform gap (the column's 14px flex gap — no extra randomness).
+  Stable per card (`seedFrac`), never overlapping.
 - **Hover**: the card scales *down* slightly (`whileHover scale 0.98`) and the × delete
   appears. **No inline editing** — clicking a media card opens the lightbox; notes/quotes
   do nothing on click. The composer is the only add path (drop/paste create a card

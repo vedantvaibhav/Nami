@@ -374,12 +374,12 @@ export default function App() {
           every Months↔Years switch (WebGL context + shaders + textures) was
           the source of the switch lag. Hidden layer is visibility:hidden and
           the orbit's frameloop pauses, so it costs nothing while inactive. */}
+      {/* hidden layers stay opacity-0 but PAINTED — flipping visibility forced a
+          full timeline repaint in the same frame the pill morph starts (hitch) */}
       <motion.div
         className="view-layer"
         initial={false}
-        animate={isYears
-          ? { opacity: 0, scale: 0.97, transitionEnd: { visibility: 'hidden' } }
-          : { opacity: 1, scale: 1, visibility: 'visible' }}
+        animate={isYears ? { opacity: 0, scale: 0.97 } : { opacity: 1, scale: 1 }}
         transition={VIEW_SWAP}
         style={{ pointerEvents: isYears ? 'none' : 'auto' }}
       >
@@ -425,9 +425,7 @@ export default function App() {
       <motion.div
         className="view-layer"
         initial={false}
-        animate={isYears
-          ? { opacity: 1, scale: 1, visibility: 'visible' }
-          : { opacity: 0, scale: 1.03, transitionEnd: { visibility: 'hidden' } }}
+        animate={isYears ? { opacity: 1, scale: 1 } : { opacity: 0, scale: 1.03 }}
         transition={VIEW_SWAP}
         style={{ pointerEvents: isYears ? 'auto' : 'none' }}
       >

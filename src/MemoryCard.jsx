@@ -128,13 +128,11 @@ export default function MemoryCard({
   const color = COLORS[m.color] || COLORS.blue
   const isQuote = type === 'quote'
 
-  // placement: most cards anchor to the top of their column; an occasional
-  // one (~30%) sits noticeably lower so the wall feels hand-arranged.
-  // Stable per card (seeded by id).
+  // placement: most columns start at the top; an occasional first card (~30%)
+  // sits noticeably lower so the wall feels hand-arranged. Cards after the
+  // first keep one uniform gap (the column's flex gap) — no extra randomness.
   const f = seedFrac(m.id + ':y')
-  const scatter = index === 0
-    ? (f < 0.7 ? 0 : Math.round(140 + f * 120))
-    : Math.round(24 + f * 48)
+  const scatter = index === 0 && f >= 0.7 ? Math.round(140 + f * 120) : 0
 
   return (
     <motion.div
