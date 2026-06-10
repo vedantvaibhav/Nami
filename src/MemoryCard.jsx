@@ -131,19 +131,21 @@ export default function MemoryCard({
   return (
     <motion.div
       // shared id so the card glides from its Days slot to its Months slot
-      // (and back) when the timeline re-lays-out on toggle
+      // (and back) on toggle. layout="position" => animate ONLY the move, never
+      // the size — otherwise the card balloons in height while the image
+      // re-measures mid-transition. enter is opacity-only for the same reason
+      // (a scale/y transform fights the layout transform).
       layoutId={m.id}
+      layout="position"
       className={`card ${isQuote ? 'card-quote' : ''}`}
       style={isQuote ? { marginTop: scatter } : { marginTop: scatter, background: color.bg }}
-      initial={{ opacity: 0, y: 12, scale: 0.97 }}
-      animate={{ opacity: 1, y: 0, scale: 1 }}
-      exit={{ opacity: 0, scale: 0.92, transition: { duration: 0.16, ease: 'easeOut' } }}
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0, transition: { duration: 0.16, ease: 'easeOut' } }}
       transition={{
-        duration: 0.42,
-        ease: [0.16, 1, 0.3, 1],
-        delay: Math.min(index, 6) * 0.04, // gentle cascade down the column
-        // the toggle "flight" — slow, smooth glide with a hint of life
-        layout: { type: 'spring', stiffness: 85, damping: 19, mass: 1 },
+        opacity: { duration: 0.34, ease: [0.16, 1, 0.3, 1], delay: Math.min(index, 6) * 0.04 },
+        // the toggle glide — smooth, a touch faster than before
+        layout: { type: 'spring', stiffness: 120, damping: 22, mass: 1 },
       }}
       whileHover={{ scale: 0.98 }}
       onClick={(e) => {
