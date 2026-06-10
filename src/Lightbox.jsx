@@ -15,9 +15,9 @@ const COLLAGE = {
     { left: 70, top: 50, w: 48, r: 3, z: 2 },
   ],
   3: [
-    { left: 20, top: 47, w: 36, r: -3, z: 1 },
-    { left: 50, top: 53, w: 36, r: 2, z: 2 },
-    { left: 80, top: 47, w: 36, r: 3, z: 3 },
+    { left: 29, top: 34, w: 42, r: -3, z: 1 },
+    { left: 71, top: 34, w: 42, r: 3, z: 2 },
+    { left: 50, top: 66, w: 42, r: -2, z: 3 },
   ],
   4: [
     { left: 29, top: 34, w: 42, r: -3, z: 1 },
