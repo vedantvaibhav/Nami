@@ -153,7 +153,7 @@ export default function Lightbox({ m, onClose }) {
         transition={{ duration: 0.15 }}
         onClick={onClose}
       >
-        <div className="lb-photo-wrap" onClick={(e) => e.stopPropagation()}>
+        <div className="lb-photo-wrap">
           <PhotoExpand m={m} />
         </div>
       </motion.div>
