@@ -31,10 +31,6 @@ const COL_W = 340 // fixed column width — populated dates lay out sequentially
 export default function App() {
   const [memories, setMemories] = useState(null)
   const [zoomIdx, setZoomIdx] = useState(2) // open in Years view on load
-  const [editingId, setEditingId] = useState(null)
-  const editingIdRef = useRef(null)
-  // keep a ref in lockstep so handlers never read a stale editingId closure
-  const setEditing = useCallback((id) => { editingIdRef.current = id; setEditingId(id) }, [])
   const [openId, setOpenId] = useState(null) // lightbox
   const [composerOpen, setComposerOpen] = useState(false)
   const [composerKey, setComposerKey] = useState(0) // remount composer fresh on each open
@@ -235,8 +231,6 @@ export default function App() {
   }, [zoomIdx, widthPx, syncThumb])
 
   // ---- mutations -------------------------------------------------------
-  const update = (next) => setMemories((ms) => ms.map((m) => (m.id === next.id ? next : m)))
-
   const removeMemory = useCallback((id) => {
     setMemories((ms) => {
       const m = ms.find((x) => x.id === id)
@@ -244,39 +238,15 @@ export default function App() {
       if (m?.imgId) deleteImage(m.imgId)
       return ms.filter((x) => x.id !== id)
     })
-    if (editingIdRef.current === id) setEditing(null)
     setOpenId((cur) => (cur === id ? null : cur))
-  }, [setEditing])
-
-  // id is passed in explicitly by the card being edited — never from a closure/ref
-  const commitEditing = useCallback((id = editingIdRef.current) => {
-    if (!id) return
-    setMemories((ms) =>
-      ms
-        .filter((m) => !(m.id === id && isEmpty(m))) // discard empty
-        .map((m) => (m.id === id ? { ...m, draft: false } : m))
-    )
-    if (editingIdRef.current === id) setEditing(null)
-  }, [setEditing])
-
-  const cancelEditing = useCallback((id = editingIdRef.current) => {
-    setMemories((ms) => {
-      const m = ms.find((x) => x.id === id)
-      if (m?.draft) m.media?.forEach((x) => deleteImage(x.id))
-      return ms.filter((x) => !(x.id === id && x.draft))
-    })
-    if (editingIdRef.current === id) setEditing(null)
-  }, [setEditing])
-
-  const setCardDate = (id, iso) =>
-    setMemories((ms) => ms.map((m) => (m.id === id ? { ...m, date: iso } : m)))
+  }, [])
 
   // completely random pastel from the palette; fixed once assigned
   const nextColor = () => COLOR_KEYS[Math.floor(Math.random() * COLOR_KEYS.length)]
   const todayISO = () => toISO(new Date())
 
-  // how many real (non-draft) memories already sit on a date
-  const countOn = (iso) => memories.filter((m) => m.date === iso && !m.draft).length
+  // how many memories already sit on a date
+  const countOn = (iso) => memories.filter((m) => m.date === iso).length
   const showToast = (msg) => {
     setToast(msg)
     clearTimeout(toastTimer.current)
@@ -294,7 +264,6 @@ export default function App() {
     date,
     color: nextColor(),
     media: [],
-    draft: true,
   })
 
   // commit a finished memory from the morphing composer form.
@@ -319,7 +288,6 @@ export default function App() {
   }
 
   const openComposer = () => {
-    if (editingIdRef.current) commitEditing()
     setOpenId(null)
     setComposerKey((k) => k + 1) // fresh form each open
     sizeMorph.current = true
@@ -371,36 +339,26 @@ export default function App() {
   }
 
   // ---- canvas interactions ----------------------------------------------
-  const onCanvasClick = (e) => {
-    if (e.target !== e.currentTarget) return
-    if (editingIdRef.current) commitEditing()
-  }
-
+  // dropped/pasted files become a memory on today directly (no inline editing)
   const onDrop = async (e) => {
     e.preventDefault()
     if (zoom.id === 'years') return // orbit view: no drop target
     const files = [...(e.dataTransfer?.files || [])]
     if (!files.length) return
-    if (editingIdRef.current) return attachFiles(editingIdRef.current, files)
     if (countOn(anchorDate()) >= DAY_LIMIT) { showToast(`Only ${DAY_LIMIT} memories per day`); return }
     const card = blankCard(anchorDate())
     setMemories((ms) => [...ms, card])
-    setEditing(card.id)
     attachFiles(card.id, files)
   }
 
-  // paste an image -> attach to the editing card, else spawn a new card with it
   useEffect(() => {
     const onPaste = async (e) => {
       const item = [...(e.clipboardData?.items || [])].find((i) => i.type.startsWith('image/'))
       if (!item) return
-      const file = item.getAsFile()
-      if (editingIdRef.current) return attachFiles(editingIdRef.current, [file])
       if (countOn(anchorDate()) >= DAY_LIMIT) { showToast(`Only ${DAY_LIMIT} memories per day`); return }
       const card = blankCard(anchorDate())
       setMemories((ms) => [...ms, card])
-      setEditing(card.id)
-      attachFiles(card.id, [file])
+      attachFiles(card.id, [item.getAsFile()])
     }
     window.addEventListener('paste', onPaste)
     return () => window.removeEventListener('paste', onPaste)
@@ -426,7 +384,7 @@ export default function App() {
         style={{ pointerEvents: isYears ? 'none' : 'auto' }}
       >
       <div className="scroller" ref={scrollRef}>
-        <div className="canvas" style={{ width: widthPx }} onClick={onCanvasClick}>
+        <div className="canvas" style={{ width: widthPx }}>
           <div className="topline" />
           {columns.map(({ key, colX }) => {
             const d = fromISO(key)
@@ -453,15 +411,8 @@ export default function App() {
                     key={m.id}
                     m={m}
                     index={idx}
-                    editing={m.id === editingId}
-                    onEdit={setEditing}
-                    onChange={update}
-                    onCommit={() => commitEditing(m.id)}
-                    onCancel={() => cancelEditing(m.id)}
                     onDelete={removeMemory}
                     onOpen={setOpenId}
-                    onAttach={attachFiles}
-                    onSetDate={setCardDate}
                   />
                 ))}
               </AnimatePresence>

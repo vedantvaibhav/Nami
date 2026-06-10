@@ -67,7 +67,7 @@ A **memory** object (stored in the `memories` array, persisted as a list):
 |------|----------------|
 | `src/main.jsx` | React entry. Renders `<App/>` (StrictMode is OFF — it caused double-mount issues). |
 | `src/App.jsx` | The shell. Owns `memories` state, timeline geometry (columns), zoom, scroll + the zoom-pill scrollbar, the morphing dock↔composer, toast, lightbox routing, and the Days/Months timeline vs Years orbit switch. |
-| `src/MemoryCard.jsx` | Renders one card (note/quote/photo/video/audio) + inline edit mode. Exports the shared **`Icon`** component and **`useImage`** hook. Contains `DateChip`, `DropZone`, `PhotoBlock`, `VideoBlock`, `AudioBlock`. |
+| `src/MemoryCard.jsx` | Renders one card (note/quote/photo/video/audio). **No inline editing — the composer is the only way to add; cards can only be opened (media) or deleted.** Exports the shared **`Icon`** component and **`useImage`** hook. Contains `PhotoBlock` (+`CLUSTER`), `VideoBlock`, `AudioBlock`. |
 | `src/Composer.jsx` | The add form that the bottom toolbar morphs into. Title, note, big upload block, a **custom `CalendarPopover`** (portaled, anchored above the date field — we do NOT use the native date picker). |
 | `src/Lightbox.jsx` | Expand view per media type: `PhotoExpand` (overlapping collage of prints, close at bottom, no text), `VideoExpand` (big, autoplay muted, volume toggle), `AudioExpand` (waveform + centred play/pause + scrubber). |
 | `src/YearOrbit.jsx` | The Years view. Builds media items from all committed memories and renders the 3D canvas; `OrbitModal` is the click-to-open card. |
@@ -126,8 +126,13 @@ tracks scroll, and you can drag it. See `syncThumb` / `thumbX` / `thumbWmv`.
   white-framed prints side by side, overlapping edges, seeded tilts.
 - **Photo expand = spread collage** (`COLLAGE` slots in `Lightbox.jsx`, up to 4 prints,
   minimal overlap so every print stays visible).
-- **Scattered placement**: every card gets a stable seeded `marginTop` (`seedFrac`) so
-  columns start/flow at varied heights — organic, deterministic, never overlapping.
+- **Scattered placement**: cards are **mostly top-anchored** — the first card in a column
+  has `marginTop: 0` ~70% of the time, occasionally dropping to ~140–260px; later cards
+  add a seeded 24–72px gap. Stable per card (`seedFrac`), never overlapping.
+- **Hover**: the card scales *down* slightly (`whileHover scale 0.98`) and the × delete
+  appears. **No inline editing** — clicking a media card opens the lightbox; notes/quotes
+  do nothing on click. The composer is the only add path (drop/paste create a card
+  directly on today).
 - **Tilts/waveforms are seeded by id** (`seededTilt`, `seededBars`) so they're stable
   across reloads.
 - **The bottom dock morphs** between the toolbar and the composer via measured

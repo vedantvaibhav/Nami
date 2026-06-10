@@ -1,8 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
 import { COLORS, imageURL } from './store.js'
-import { cardDateLabel, fromISO, toISO, startOfDay } from './time.js'
-import { ACCEPT, icons, inferType, seededBars, seededTilt, seedFrac, videoThumb } from './media.js'
+import { icons, inferType, seededBars, seededTilt, seedFrac, videoThumb } from './media.js'
 
 export function useImage(imgId) {
   const [url, setUrl] = useState(null)
@@ -30,61 +29,6 @@ export const Icon = ({ d, size = 16, stroke = 1.8, className = '' }) => (
     {d.split(' M').map((p, i) => <path key={i} d={(i === 0 ? '' : 'M') + p} />)}
   </svg>
 )
-
-const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
-
-// ---- date chip + minimal month/day picker --------------------------------
-function DateChip({ m, color, editable, onSetDate }) {
-  const [open, setOpen] = useState(false)
-  const date = fromISO(m.date)
-  const today = startOfDay(new Date())
-  const year = date.getFullYear()
-
-  const setMonth = (mo) => {
-    const maxDay = new Date(year, mo + 1, 0).getDate()
-    let d = new Date(year, mo, Math.min(date.getDate(), maxDay))
-    if (d > today) d = today
-    onSetDate(toISO(d))
-  }
-  const setDay = (day) => {
-    let d = new Date(year, date.getMonth(), day)
-    if (d > today) d = today
-    onSetDate(toISO(d))
-  }
-
-  const monthMax = year === today.getFullYear() ? today.getMonth() : 11
-  const dayMax =
-    year === today.getFullYear() && date.getMonth() === today.getMonth()
-      ? today.getDate()
-      : new Date(year, date.getMonth() + 1, 0).getDate()
-
-  return (
-    <div className="chip-wrap" onClick={(e) => e.stopPropagation()}>
-      <button
-        className="card-chip"
-        style={{ color: color.text }}
-        onClick={() => editable && setOpen(!open)}
-      >
-        {cardDateLabel(m.date)}
-      </button>
-      {open && editable && (
-        <div className="chip-picker">
-          <select value={date.getMonth()} onChange={(e) => setMonth(+e.target.value)}>
-            {MONTHS.slice(0, monthMax + 1).map((name, i) => (
-              <option key={name} value={i}>{name}</option>
-            ))}
-          </select>
-          <select value={date.getDate()} onChange={(e) => setDay(+e.target.value)}>
-            {Array.from({ length: dayMax }, (_, i) => i + 1).map((d) => (
-              <option key={d} value={d}>{d}</option>
-            ))}
-          </select>
-          <button className="chip-done" onClick={() => setOpen(false)}>✓</button>
-        </div>
-      )}
-    </div>
-  )
-}
 
 // ---- media renderers -------------------------------------------------------
 function ClusterImg({ id, style }) {
@@ -175,147 +119,41 @@ export function AudioBlock({ m, tall = false }) {
   )
 }
 
-// ---- edit-mode pieces ------------------------------------------------------
-function DropZone({ onFiles, warning }) {
-  const inputRef = useRef(null)
-  const [over, setOver] = useState(false)
-  return (
-    <div
-      className={`dropzone ${over ? 'dropzone-over' : ''}`}
-      onClick={(e) => { e.stopPropagation(); inputRef.current?.click() }}
-      onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); setOver(true) }}
-      onDragLeave={() => setOver(false)}
-      onDrop={(e) => {
-        e.preventDefault()
-        e.stopPropagation()
-        setOver(false)
-        onFiles([...e.dataTransfer.files])
-      }}
-    >
-      <Icon d={icons.upload} size={20} className="dropzone-icon" />
-      {warning && <div className="dropzone-warning">This file is large and may not save reliably.</div>}
-      <input
-        ref={inputRef}
-        type="file"
-        accept={ACCEPT}
-        multiple
-        hidden
-        onChange={(e) => { onFiles([...e.target.files]); e.target.value = '' }}
-      />
-    </div>
-  )
-}
-
-function EditMediaRow({ m }) {
-  if (!m.media?.length) return null
-  return (
-    <div className="edit-media-row">
-      {m.media.map((x) => (
-        <EditMediaThumb key={x.id} item={x} />
-      ))}
-    </div>
-  )
-}
-
-function EditMediaThumb({ item }) {
-  const url = useImage(item.kind === 'image' ? item.id : null)
-  if (item.kind === 'image' && url) return <img className="edit-thumb" src={url} alt="" />
-  return <span className="edit-thumb edit-thumb-file">{item.kind === 'video' ? '▶' : '♪'}</span>
-}
-
 // ---- the card --------------------------------------------------------------
 export default function MemoryCard({
   m, editing, index = 0,
-  onEdit, onChange, onCommit, onCancel, onDelete, onOpen,
-  onAttach, onSetDate,
+  onDelete, onOpen,
 }) {
   const type = inferType(m)
   const color = COLORS[m.color] || COLORS.blue
-  const titleRef = useRef(null)
-  // scattered placement: each card lands at a stable seeded height in its
-  // column — the first somewhere near the top, the rest spaced further down
-  const scatter = index === 0
-    ? Math.round(seedFrac(m.id + ':y') * 200)
-    : Math.round(seedFrac(m.id + ':y') * 120)
-
-  useEffect(() => {
-    if (editing && titleRef.current) {
-      titleRef.current.focus()
-      titleRef.current.select()
-    }
-  }, [editing])
-
-  const onKeyDown = (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); onCommit() }
-    if (e.key === 'Escape') onCancel()
-  }
-
   const isQuote = type === 'quote'
-  const images = (m.media || []).filter((i) => i.kind === 'image')
-  const hasMedia = (m.media || []).length > 0
+
+  // placement: most cards anchor to the top of their column; an occasional
+  // one (~30%) sits noticeably lower so the wall feels hand-arranged.
+  // Stable per card (seeded by id).
+  const f = seedFrac(m.id + ':y')
+  const scatter = index === 0
+    ? (f < 0.7 ? 0 : Math.round(140 + f * 120))
+    : Math.round(24 + f * 48)
 
   return (
     <motion.div
       layout
-      className={`card ${isQuote ? 'card-quote' : ''} ${editing ? 'card-editing' : ''}`}
+      className={`card ${isQuote ? 'card-quote' : ''}`}
       style={isQuote ? { marginTop: scatter } : { marginTop: scatter, background: color.bg }}
       initial={{ opacity: 0, scale: 0.95 }}
       animate={{ opacity: 1, scale: 1 }}
       exit={{ opacity: 0, scale: 0.9, transition: { duration: 0.15, ease: 'easeOut' } }}
       transition={{ type: 'spring', stiffness: 380, damping: 30 }}
+      whileHover={{ scale: 0.98 }}
       onClick={(e) => {
-        if (editing) return
-        if (e.target.closest('button, input, select, textarea, .audio-pill, .chip-picker')) return
-        if (type === 'note' || isQuote) onEdit(m.id)
-        else onOpen(m.id)
+        if (e.target.closest('button, .audio-pill')) return
+        if (type !== 'note' && !isQuote) onOpen(m.id)
       }}
     >
-      {!editing && (
-        <button className="card-delete" onClick={(e) => { e.stopPropagation(); onDelete(m.id) }} title="Delete">×</button>
-      )}
+      <button className="card-delete" onClick={(e) => { e.stopPropagation(); onDelete(m.id) }} title="Delete">×</button>
 
-      {editing ? (
-        <>
-          <textarea
-            ref={titleRef}
-            className={isQuote ? 'edit-quote' : 'edit-title'}
-            style={isQuote ? undefined : { color: `color-mix(in srgb, ${color.text} 78%, #fff)` }}
-            value={m.title}
-            rows={1}
-            placeholder={isQuote ? 'A line worth remembering…' : 'Name this moment'}
-            onChange={(e) => onChange({ ...m, title: e.target.value })}
-            onKeyDown={onKeyDown}
-          />
-          {!isQuote && (
-            <>
-              <DateChip m={m} color={color} editable onSetDate={(iso) => onSetDate(m.id, iso)} />
-              <EditMediaRow m={m} />
-              <DropZone onFiles={(files) => onAttach(m.id, files)} warning={m.warnLarge} />
-              <textarea
-                className="edit-body"
-                value={m.body}
-                rows={2}
-                placeholder="Add a note (optional)"
-                onChange={(e) => onChange({ ...m, body: e.target.value })}
-                onKeyDown={onKeyDown}
-              />
-            </>
-          )}
-          <div className="edit-toolbar" onClick={(e) => e.stopPropagation()}>
-            {!hasMedia && (
-              <button
-                className={`type-toggle ${isQuote ? 'type-toggle-active' : ''}`}
-                onClick={() => onChange({ ...m, type: isQuote ? 'note' : 'quote' })}
-                title="Quote style"
-              >
-                Aa
-              </button>
-            )}
-            <button className="toolbar-delete" onClick={() => onDelete(m.id)} title="Delete">🗑</button>
-            <button className="toolbar-done" onClick={onCommit} title="Done">✓</button>
-          </div>
-        </>
-      ) : isQuote ? (
+      {isQuote ? (
         <div className="quote-note">
           <span className="quote-strips" style={{ backgroundColor: color.bg, color: color.text }}>
             {m.title || '…'}
