@@ -9,21 +9,21 @@ import { Icon, useImage } from './MemoryCard.jsx'
 // Bigger prints sitting closer so they overlap slightly (a fanned pile), every
 // print still clearly visible — edges tuck under, never bury.
 const COLLAGE = {
-  1: [{ left: 50, top: 50, w: 74, r: -2, z: 1 }],
+  1: [{ left: 50, top: 50, w: 70, r: -2, z: 1 }],
   2: [
-    { left: 37, top: 49, w: 56, r: -4, z: 1 },
-    { left: 61, top: 51, w: 56, r: 4, z: 2 },
+    { left: 30, top: 50, w: 48, r: -3, z: 1 },
+    { left: 70, top: 50, w: 48, r: 3, z: 2 },
   ],
   3: [
-    { left: 35, top: 41, w: 50, r: -4, z: 1 },
-    { left: 63, top: 43, w: 50, r: 4, z: 2 },
-    { left: 49, top: 64, w: 52, r: -2, z: 3 },
+    { left: 20, top: 47, w: 36, r: -3, z: 1 },
+    { left: 50, top: 53, w: 36, r: 2, z: 2 },
+    { left: 80, top: 47, w: 36, r: 3, z: 3 },
   ],
   4: [
-    { left: 36, top: 40, w: 48, r: -4, z: 1 },
-    { left: 63, top: 41, w: 48, r: 3, z: 2 },
-    { left: 37, top: 62, w: 48, r: 3, z: 3 },
-    { left: 62, top: 63, w: 48, r: -4, z: 4 },
+    { left: 29, top: 34, w: 42, r: -3, z: 1 },
+    { left: 71, top: 34, w: 42, r: 3, z: 2 },
+    { left: 29, top: 66, w: 42, r: 3, z: 3 },
+    { left: 71, top: 66, w: 42, r: -3, z: 4 },
   ],
 }
 
