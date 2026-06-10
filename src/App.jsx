@@ -18,6 +18,13 @@ const SHELL_CLOSE = { type: 'spring', stiffness: 190, damping: 32, mass: 1.05 } 
 // A card is worth keeping if it has a title, body, or any media
 const isEmpty = (m) => !m.title?.trim() && !m.body?.trim() && !(m.media?.length)
 
+// view cross-fade: bouncy spring on scale, clean tween on opacity
+// (a spring on opacity would overshoot past 1 and flicker)
+const VIEW_SWAP = {
+  scale: { type: 'spring', stiffness: 300, damping: 16, mass: 0.9 },
+  opacity: { duration: 0.3, ease: 'easeOut' },
+}
+
 const DAY_LIMIT = 3 // max memories per day
 const COL_W = 340 // fixed column width — populated dates lay out sequentially
 
@@ -413,9 +420,9 @@ export default function App() {
         className="view-layer"
         initial={false}
         animate={isYears
-          ? { opacity: 0, scale: 0.985, transitionEnd: { visibility: 'hidden' } }
+          ? { opacity: 0, scale: 0.97, transitionEnd: { visibility: 'hidden' } }
           : { opacity: 1, scale: 1, visibility: 'visible' }}
-        transition={{ duration: 0.3, ease: 'easeOut' }}
+        transition={VIEW_SWAP}
         style={{ pointerEvents: isYears ? 'none' : 'auto' }}
       >
       <div className="scroller" ref={scrollRef}>
@@ -468,8 +475,8 @@ export default function App() {
         initial={false}
         animate={isYears
           ? { opacity: 1, scale: 1, visibility: 'visible' }
-          : { opacity: 0, scale: 1.015, transitionEnd: { visibility: 'hidden' } }}
-        transition={{ duration: 0.3, ease: 'easeOut' }}
+          : { opacity: 0, scale: 1.03, transitionEnd: { visibility: 'hidden' } }}
+        transition={VIEW_SWAP}
         style={{ pointerEvents: isYears ? 'auto' : 'none' }}
       >
         <YearOrbit memories={memories} active={isYears} />
