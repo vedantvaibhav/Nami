@@ -37,12 +37,9 @@ function StackImg({ id, style }) {
   return <img className="stack-img" style={style} src={url} alt="" draggable={false} />
 }
 
-// multiple photos = a deck: the first print sits on top, each next one peeks out
-// below it, slightly tilted, like a hand-dropped stack (see reference)
-const PRINT_W = 248
-const PRINT_H = 188 // ~4:3 print
-const PEEK = 22     // how far each lower print drops below the one above
-
+// multiple photos = a deck pinned in ONE spot: every print fills the card and
+// sits in the same place; only the rotation differs, so the ones underneath
+// peek out at the corners. The top print stays the focus (see reference).
 function PhotoBlock({ m }) {
   const images = m.media.filter((x) => x.kind === 'image').slice(0, 3)
   const topUrl = useImage(images[0]?.id)
@@ -52,23 +49,18 @@ function PhotoBlock({ m }) {
   }
   const n = images.length
   return (
-    <div className="photo-stack" style={{ height: PRINT_H + (n - 1) * PEEK + 8 }}>
+    <div className="photo-stack">
       {images.map((img, i) => {
-        // front print barely tilted; each one behind it leans a little more, alternating
-        const rot = i === 0 ? seededTilt(m.id, i, 1.5) : seededTilt(m.id, i, 3) + (i % 2 ? 2.5 : -2.5)
-        const jig = i === 0 ? 0 : seededTilt(m.id, i + 9, 7)
+        // front print nearly straight; each one behind it leans a few degrees,
+        // alternating side, so its corners show around the top print
+        const rot = i === 0
+          ? seededTilt(m.id, i, 1.2)
+          : (i % 2 ? 1 : -1) * (4 + seedFrac(m.id + i) * 3)
         return (
           <StackImg
             key={img.id}
             id={img.id}
-            style={{
-              width: PRINT_W,
-              height: PRINT_H,
-              left: `calc(50% + ${jig}px)`,
-              top: i * PEEK,
-              zIndex: n - i, // first image on top, rest stacked behind
-              transform: `translateX(-50%) rotate(${rot}deg)`,
-            }}
+            style={{ zIndex: n - i, transform: `rotate(${rot}deg)` }}
           />
         )
       })}
