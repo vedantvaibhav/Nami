@@ -321,7 +321,13 @@ export default function App() {
     const tooLarge = accepted.some(({ file }) => file.size > MAX_SAFE_BYTES)
     setMemories((ms) => ms.map((m) => (m.id === id ? { ...m, warnLarge: tooLarge } : m)))
 
+    const existingImgs = memories?.find((m) => m.id === id)?.media?.filter((x) => x.kind === 'image').length || 0
+    let imgRoom = 4 - existingImgs // cap images at 4
     for (const { file, kind } of accepted) {
+      if (kind === 'image') {
+        if (imgRoom <= 0) continue
+        imgRoom--
+      }
       const mediaId = crypto.randomUUID()
       try {
         await saveImage(mediaId, file)

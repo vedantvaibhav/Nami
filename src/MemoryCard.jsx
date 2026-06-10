@@ -41,7 +41,7 @@ function StackImg({ id, style }) {
 // sits in the same place; only the rotation differs, so the ones underneath
 // peek out at the corners. The top print stays the focus (see reference).
 function PhotoBlock({ m }) {
-  const images = m.media.filter((x) => x.kind === 'image').slice(0, 3)
+  const images = m.media.filter((x) => x.kind === 'image').slice(0, 4)
   const topUrl = useImage(images[0]?.id)
   if (!topUrl) return null
   if (images.length === 1) {
@@ -51,11 +51,11 @@ function PhotoBlock({ m }) {
   return (
     <div className="photo-stack">
       {images.map((img, i) => {
-        // front print nearly straight; each one behind it leans a few degrees,
+        // front print nearly straight; each one behind it leans just a touch,
         // alternating side, so its corners show around the top print
         const rot = i === 0
-          ? seededTilt(m.id, i, 1.2)
-          : (i % 2 ? 1 : -1) * (4 + seedFrac(m.id + i) * 3)
+          ? seededTilt(m.id, i, 0.8)
+          : (i % 2 ? 1 : -1) * (2 + seedFrac(m.id + i) * 1.5)
         return (
           <StackImg
             key={img.id}

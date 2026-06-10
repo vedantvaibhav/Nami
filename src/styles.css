@@ -96,7 +96,7 @@ body {
 /* multi-photo: a deck pinned in one spot, filling the card — only rotation
    differs so the prints underneath peek out at the corners. The extra top
    margin clears the rotated corners so they don't poke into the text above. */
-.photo-stack { position: relative; margin-top: 24px; aspect-ratio: 4 / 3; }
+.photo-stack { position: relative; margin-top: 24px; margin-bottom: 14px; aspect-ratio: 4 / 3; }
 .stack-img {
   position: absolute; inset: 0; width: 100%; height: 100%;
   object-fit: cover;
@@ -309,7 +309,7 @@ body {
 .lb-collage-img {
   position: absolute;
   max-height: 56vh; object-fit: cover;
-  border: 7px solid #fff; border-radius: 8px;
+  border-radius: 16px;
   box-shadow: 0 18px 50px rgba(0,0,0,0.35);
 }
 .lb-close-bottom {

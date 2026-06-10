@@ -5,24 +5,25 @@ import { fmtTime, icons, inferType, seededBars } from './media.js'
 import { Icon, useImage } from './MemoryCard.jsx'
 
 // ---- photo: overlapping collage of prints (Amie "Meet Eric/Antoine" style) ----
-// slot layouts per image count: % positions of each print's centre + rotation
-// spread out so every print stays visible — edges may kiss, never bury
+// slot layouts per image count: % positions of each print's centre + rotation.
+// Bigger prints sitting closer so they overlap slightly (a fanned pile), every
+// print still clearly visible — edges tuck under, never bury.
 const COLLAGE = {
-  1: [{ left: 50, top: 50, w: 68, r: -2, z: 1 }],
+  1: [{ left: 50, top: 50, w: 74, r: -2, z: 1 }],
   2: [
-    { left: 29, top: 47, w: 44, r: -3, z: 2 },
-    { left: 70, top: 54, w: 44, r: 3, z: 1 },
+    { left: 37, top: 49, w: 56, r: -4, z: 1 },
+    { left: 61, top: 51, w: 56, r: 4, z: 2 },
   ],
   3: [
-    { left: 25, top: 33, w: 40, r: -3, z: 2 },
-    { left: 73, top: 37, w: 40, r: 3, z: 1 },
-    { left: 47, top: 71, w: 40, r: -4, z: 3 },
+    { left: 35, top: 41, w: 50, r: -4, z: 1 },
+    { left: 63, top: 43, w: 50, r: 4, z: 2 },
+    { left: 49, top: 64, w: 52, r: -2, z: 3 },
   ],
   4: [
-    { left: 25, top: 29, w: 38, r: -3, z: 2 },
-    { left: 74, top: 32, w: 38, r: 3, z: 1 },
-    { left: 27, top: 73, w: 36, r: -5, z: 3 },
-    { left: 73, top: 70, w: 36, r: 5, z: 2 },
+    { left: 36, top: 40, w: 48, r: -4, z: 1 },
+    { left: 63, top: 41, w: 48, r: 3, z: 2 },
+    { left: 37, top: 62, w: 48, r: 3, z: 3 },
+    { left: 62, top: 63, w: 48, r: -4, z: 4 },
   ],
 }
 

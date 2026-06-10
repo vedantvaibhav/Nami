@@ -133,7 +133,12 @@ export default function Composer({ active, defaultDate, onClose, onAdd }) {
   const attach = async (files) => {
     const accepted = files.map((f) => ({ file: f, kind: kindFromMime(f.type) })).filter((x) => x.kind)
     if (accepted.some(({ file }) => file.size > MAX_SAFE_BYTES)) setWarn(true)
+    let imgRoom = 4 - media.filter((x) => x.kind === 'image').length // cap images at 4
     for (const { file, kind } of accepted) {
+      if (kind === 'image') {
+        if (imgRoom <= 0) continue
+        imgRoom--
+      }
       const id = crypto.randomUUID()
       await saveImage(id, file)
       setMedia((m) => [...m, { id, kind, name: file.name }])
