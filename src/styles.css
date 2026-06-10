@@ -304,11 +304,11 @@ body {
 }
 .lb-collage {
   position: relative;
-  width: min(820px, 88vw); height: 64vh;
+  width: min(1040px, 94vw); height: 72vh;
 }
 .lb-collage-img {
   position: absolute;
-  max-height: 56vh; object-fit: cover;
+  max-height: 64vh; object-fit: cover;
   border-radius: 16px;
   box-shadow: 0 18px 50px rgba(0,0,0,0.35);
 }
