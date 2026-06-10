@@ -3,12 +3,13 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { COLORS } from './store.js'
 import { useImage } from './MemoryCard.jsx'
 import { cardDateLabel } from './time.js'
+import { firstImageId, seededTilt } from './media.js'
 import { buildMediaItems } from './canvas3d/textures.js'
 import InfiniteMemoryCanvas from './canvas3d/InfiniteMemoryCanvas.jsx'
 
 function OrbitModal({ m, onClose }) {
   const color = COLORS[m.color] || COLORS.blue
-  const imgUrl = useImage(m.imgId)
+  const imgUrl = useImage(firstImageId(m))
   return (
     <motion.div
       className="orbit-backdrop"
@@ -34,7 +35,7 @@ function OrbitModal({ m, onClose }) {
             <div className="orbit-stage-date" style={{ color: color.text }}>{cardDateLabel(m.date)}</div>
             {m.body && <div className="orbit-stage-body">{m.body}</div>}
             {imgUrl && (
-              <div className="polaroid" style={{ transform: `rotate(${m.tilt}deg)` }}>
+              <div className="polaroid" style={{ transform: `rotate(${seededTilt(m.id, 0, 2)}deg)` }}>
                 <img src={imgUrl} alt={m.title || 'memory'} draggable={false} />
               </div>
             )}
@@ -47,20 +48,21 @@ function OrbitModal({ m, onClose }) {
   )
 }
 
-export default function YearOrbit({ memories, year }) {
+export default function YearOrbit({ memories, active = true }) {
   const [media, setMedia] = useState(null)
   const [open, setOpen] = useState(null)
 
   useEffect(() => {
     let live = true
-    const items = memories.filter((m) => m.date.startsWith(String(year)) && !m.draft)
+    // every committed memory orbits here, regardless of its year
+    const items = memories.filter((m) => !m.draft)
     buildMediaItems(items).then((built) => live && setMedia(built))
     return () => { live = false }
-  }, [memories, year])
+  }, [memories])
 
   return (
     <div className="orbit-view">
-      {media && <InfiniteMemoryCanvas media={media} onOpen={setOpen} />}
+      {media && <InfiniteMemoryCanvas media={media} active={active} onOpen={setOpen} />}
 
       <AnimatePresence>
         {open && <OrbitModal m={open} onClose={() => setOpen(null)} />}

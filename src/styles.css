@@ -13,6 +13,21 @@ body {
 
 .viewport { position: relative; height: 100vh; }
 
+/* stacked view layers (2D timeline + 3D orbit) cross-faded on zoom change.
+   Promote each to its own compositor layer so the opacity+scale crossfade is
+   pure GPU work and never re-rasterises the timeline mid-switch (the cause of
+   the first year->month hitch). */
+.view-layer {
+  position: absolute; inset: 0;
+  will-change: transform, opacity;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+}
+/* the inactive layer stays painted (opacity 0) for a smooth crossfade, but must
+   not capture pointer/scroll. !important is required: R3F sets an inline
+   pointer-events:auto on its <canvas> that would otherwise win over the wrapper. */
+.view-layer-off, .view-layer-off * { pointer-events: none !important; }
+
 .scroller {
   height: 100%; overflow-x: auto; overflow-y: hidden;
   overflow-anchor: none;
@@ -40,18 +55,20 @@ body {
   background: #F1F1EF; pointer-events: none;
 }
 
-/* ---- cards ---- */
+/* ---- columns + cards ---- */
+.column {
+  position: absolute;
+  display: flex; flex-direction: column; gap: 14px;
+}
 .card {
-  position: absolute; width: 264px;
+  position: relative; width: 100%;
   border-radius: 16px; padding: 16px 16px 14px;
-  cursor: grab; user-select: none;
+  cursor: pointer; user-select: none;
   box-shadow: none;
 }
-.card:active { cursor: grabbing; }
 .card:hover .card-delete { opacity: 1; }
 
-.card-title { font-size: 17px; font-weight: 600; letter-spacing: -0.01em; line-height: 1.3; overflow-wrap: anywhere; }
-.card-date { font-size: 11px; font-weight: 600; letter-spacing: 0.08em; margin-top: 7px; opacity: 0.65; }
+.card-title { font-size: 17px; font-weight: 500; letter-spacing: -0.01em; line-height: 1.3; overflow-wrap: anywhere; }
 .card-body { font-size: 13.5px; line-height: 1.45; color: #4A5160; margin-top: 9px; overflow-wrap: anywhere; }
 
 .card-delete {
@@ -63,21 +80,6 @@ body {
 }
 .card-delete:hover { background: #fff; color: #DC2626; }
 
-/* hover controls */
-.card-colordot {
-  position: absolute; top: 10px; right: 38px; z-index: 5;
-  width: 14px; height: 14px; border: 2px solid #fff; border-radius: 50%;
-  cursor: pointer; padding: 0; opacity: 0; transition: opacity 0.15s;
-  box-shadow: 0 0 0 1px rgba(20,20,40,0.12);
-}
-.card:hover .card-colordot { opacity: 1; }
-.card-grip {
-  position: absolute; left: 1px; top: 50%; transform: translateY(-50%);
-  color: #B3B8C2; opacity: 0; transition: opacity 0.15s;
-  cursor: grab; touch-action: none; padding: 4px;
-}
-.card-grip:active { cursor: grabbing; }
-.card:hover .card-grip { opacity: 1; }
 .error-badge {
   position: absolute; top: 10px; left: 12px;
   width: 18px; height: 18px; border-radius: 50%;
@@ -85,42 +87,21 @@ body {
   display: grid; place-items: center;
 }
 
-/* date chip */
-.chip-wrap { position: relative; display: inline-block; }
-.card-chip {
-  border: none; background: transparent; cursor: pointer; padding: 0;
-  font-size: 11px; font-weight: 600; letter-spacing: 0.08em; opacity: 0.65;
-  margin-top: 7px;
-}
-.chip-picker {
-  position: absolute; top: 100%; left: 0; z-index: 20; margin-top: 6px;
-  display: flex; gap: 5px; align-items: center;
-  background: #fff; border-radius: 10px; padding: 6px;
-  box-shadow: 0 6px 20px rgba(20,20,40,0.14);
-}
-.chip-picker select {
-  border: 1px solid #E3E5EA; border-radius: 7px; padding: 4px 6px;
-  font-size: 12px; font-family: inherit; background: #fff;
-}
-.chip-done { border: none; background: #232936; color: #fff; border-radius: 7px; padding: 5px 9px; cursor: pointer; font-weight: 700; }
-
 /* photo */
 .card-photo {
   display: block; width: 100%; height: auto; max-height: 220px;
-  object-fit: cover; border-radius: 12px; margin-top: 12px; pointer-events: none;
+  object-fit: cover; border-radius: 14px; margin-top: 12px; pointer-events: none;
 }
-.photo-stack { position: relative; margin-top: 16px; }
-.stack-under {
-  position: absolute; inset: 0; background: #fff; border-radius: 12px;
-  box-shadow: 0 2px 8px rgba(20,20,40,0.08); transform-origin: center;
+/* multi-photo: a deck pinned in one spot, filling the card — only rotation
+   differs so the prints underneath peek out at the corners. The extra top
+   margin clears the rotated corners so they don't poke into the text above. */
+.photo-stack { position: relative; margin-top: 24px; margin-bottom: 14px; aspect-ratio: 4 / 3; }
+.stack-img {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  object-fit: cover;
+  border-radius: 12px;
+  pointer-events: none;
 }
-.stack-top { margin-top: 0; position: relative; }
-.stack-count {
-  position: absolute; bottom: 8px; right: 8px; z-index: 3;
-  background: rgba(20,20,30,0.62); color: #fff; font-size: 11px; font-weight: 600;
-  padding: 2px 8px; border-radius: 999px;
-}
-
 /* video */
 .video-thumb { position: relative; margin-top: 12px; border-radius: 12px; overflow: hidden; }
 .video-thumb img { display: block; width: 100%; max-height: 220px; object-fit: cover; }
@@ -141,23 +122,9 @@ body {
   border: none; background: #232936; color: #fff; cursor: pointer;
   width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; flex-shrink: 0;
 }
-.audio-play-big { width: 44px; height: 44px; }
 .audio-bars { display: flex; align-items: center; gap: 3px; height: 100%; flex: 1; }
 .audio-bars span { flex: 1; background: currentColor; border-radius: 2px; min-height: 3px; opacity: 0.55; }
-.audio-bars-tall { height: 48px; }
 .audio-name { font-size: 12px; color: #8A8F9B; margin-top: 7px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-
-/* edit mode: dropzone + attached media row */
-.dropzone {
-  margin-top: 12px; border: 1.5px dashed rgba(20,20,40,0.22); border-radius: 12px;
-  min-height: 76px; display: grid; place-items: center; cursor: pointer;
-  color: #9aa0ac; transition: border-color 0.15s, background 0.15s; gap: 6px; padding: 10px;
-}
-.dropzone:hover, .dropzone-over { border-color: rgba(20,20,40,0.4); background: rgba(255,255,255,0.4); }
-.dropzone-warning { font-size: 11px; color: #C2570B; text-align: center; }
-.edit-media-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
-.edit-thumb { width: 44px; height: 44px; border-radius: 8px; object-fit: cover; }
-.edit-thumb-file { display: grid; place-items: center; background: rgba(255,255,255,0.6); color: #4A5160; font-size: 18px; }
 
 /* add CTA — inside the toolbar, after the divider; fills on hover */
 .add-cta {
@@ -169,72 +136,136 @@ body {
 }
 .add-cta:hover { background: #F2F3F5; }
 
+/* ---- shared icon-button pattern: no fill at rest, fill on hover/active ---- */
+.icon-btn {
+  border: none; background: transparent; color: #6B7280; cursor: pointer;
+  display: grid; place-items: center; border-radius: 50%;
+  transition: background 0.15s, color 0.15s;
+}
+.icon-btn:hover { background: #F2F3F5; color: #16181D; }
+.icon-btn:active { background: #E7E9ED; }
+
 /* ---- composer form (morphed toolbar) ---- */
 .composer {
   width: 100%;
-  padding: 16px; display: flex; flex-direction: column; gap: 10px;
+  padding: 18px; display: flex; flex-direction: column; gap: 14px;
 }
-.composer-head { display: flex; align-items: center; justify-content: space-between; }
-.composer-eyebrow {
-  font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: #9AA0AC;
+.cmp-titlerow {
+  display: flex; align-items: center; gap: 8px; margin-right: -6px;
 }
-.composer-close {
-  width: 26px; height: 26px; border: none; border-radius: 50%;
-  background: #F2F3F5; color: #4A5160; font-size: 16px; cursor: pointer;
-  display: grid; place-items: center;
-}
-.composer-close:hover { background: #E7E9ED; color: #16181D; }
-.composer-title {
+.cmp-close { width: 36px; height: 36px; border-radius: 50%; flex-shrink: 0; }
+
+.cmp-title {
+  flex: 1; min-width: 0;
   border: none; background: transparent; outline: none; padding: 0;
-  font-family: inherit; font-size: 18px; font-weight: 600; color: #16181D;
+  font-family: inherit; font-size: 20px; font-weight: 500; letter-spacing: -0.01em; color: #16181D;
 }
-.composer-title::placeholder { color: #C3C7D0; }
-.composer-body {
-  border: none; background: transparent; outline: none; padding: 0; resize: none;
-  font-family: inherit; font-size: 14px; line-height: 1.45; color: #4A5160;
-}
-.composer-body::placeholder { color: #ACB2BE; }
+.cmp-title::placeholder { color: #ACB2BE; }
 
-.composer-media { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
-.composer-thumb { position: relative; width: 52px; height: 52px; }
-.composer-thumb img { width: 52px; height: 52px; object-fit: cover; border-radius: 9px; display: block; }
-.composer-thumb-file {
-  width: 52px; height: 52px; border-radius: 9px; background: #F2F3F5; color: #4A5160;
-  display: grid; place-items: center; font-size: 18px;
+.cmp-note {
+  border: none; background: transparent; outline: none; padding: 0;
+  font-family: inherit; font-size: 17px; font-weight: 500; line-height: 1.45; color: #4A5160;
+  width: 100%; text-overflow: ellipsis;
+  margin-top: -8px;   /* tighten the gap to the title */
+  margin-bottom: 6px; /* a bit more breathing room before the upload block */
 }
-.composer-thumb-x {
-  position: absolute; top: -5px; right: -5px; width: 18px; height: 18px;
-  border: none; border-radius: 50%; background: #16181D; color: #fff;
-  font-size: 12px; line-height: 1; cursor: pointer; display: grid; place-items: center;
-}
-.composer-warn { font-size: 11px; color: #C2570B; }
+.cmp-note::placeholder { color: #ACB2BE; }
 
-.composer-row { display: flex; align-items: flex-end; gap: 10px; }
-.composer-field { display: flex; flex-direction: column; gap: 4px; }
-.composer-field span { font-size: 11px; font-weight: 600; color: #9AA0AC; padding-left: 2px; }
-.composer-field input {
-  border: 1px solid #E3E5EA; border-radius: 9px; padding: 7px 9px;
-  font-family: inherit; font-size: 13px; color: #16181D; background: #fff;
+/* big upload block */
+.cmp-upload {
+  /* 99px = 64px thumb + 16px padding top/bottom + 1.5px border ×2,
+     so the empty box is exactly the height of the filled box */
+  border: 1.5px dashed #DADCE0; border-radius: 16px;
+  min-height: 99px; display: grid; place-items: center; cursor: pointer;
+  padding: 16px; transition: border-color 0.15s, background 0.15s;
 }
-.composer-attach {
-  margin-left: auto; width: 38px; height: 38px; flex-shrink: 0;
-  border: 1px solid #E3E5EA; border-radius: 9px; background: #fff; color: #4A5160;
+.cmp-upload:hover, .cmp-upload-over { border-color: #B8BCC4; background: #FAFAFA; }
+/* once media is attached, hug it with equal 16px padding all round */
+.cmp-upload-filled { display: block; }
+.cmp-upload-empty { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.cmp-upload-icon { color: #9AA0AC; }
+.cmp-upload-text { font-size: 14px; font-weight: 500; color: #8A8F9B; }
+
+.cmp-media { display: flex; flex-wrap: wrap; gap: 8px; width: 100%; }
+.cmp-thumb { position: relative; width: 64px; height: 64px; }
+.cmp-thumb img { width: 64px; height: 64px; object-fit: cover; border-radius: 11px; display: block; }
+.cmp-thumb-file {
+  width: 64px; height: 64px; border-radius: 11px; background: #F2F3F5; color: #4A5160;
+  display: grid; place-items: center; font-size: 20px;
+}
+.cmp-thumb-x {
+  position: absolute; top: -6px; right: -6px; width: 20px; height: 20px; padding: 0;
+  border: 2px solid #fff; border-radius: 50%; background: #16181D; color: #fff;
   cursor: pointer; display: grid; place-items: center;
+  opacity: 0; transition: opacity 0.12s;
 }
-.composer-attach:hover { background: #F7F8F9; color: #16181D; }
+.cmp-thumb:hover .cmp-thumb-x { opacity: 1; }
+.cmp-media-add {
+  width: 64px; height: 64px; border-radius: 11px; border: 1.5px dashed #DADCE0;
+  display: grid; place-items: center; color: #9AA0AC;
+}
+.cmp-warn { font-size: 12px; color: #C2570B; margin-top: -4px; }
 
-.composer-add {
-  margin-top: 4px; height: 42px; border: none; border-radius: 12px;
+/* date: value + calendar icon; native input overlaid so a click opens the OS picker */
+.cmp-date {
+  position: relative; display: flex; align-items: center; justify-content: space-between;
+  border: 1px solid #E3E5EA; border-radius: 12px; padding: 14px 16px; cursor: pointer;
+  background: #fff; text-align: left; transition: border-color 0.15s, background 0.15s;
+}
+.cmp-date:hover { border-color: #B8BCC4; background: #FAFAFA; }
+.cmp-date-value { font-size: 16px; font-weight: 500; color: #16181D; letter-spacing: -0.005em; }
+.cmp-date-icon { color: #6B7280; }
+
+.cmp-add {
+  margin-top: 2px; height: 48px; border: none; border-radius: 14px;
   background: #16181D; color: #fff; cursor: pointer;
-  font-family: inherit; font-size: 14px; font-weight: 600;
+  font-family: inherit; font-size: 15px; font-weight: 600;
   transition: background 0.15s, opacity 0.15s;
 }
-.composer-add:hover:not(:disabled) { background: #2C2F38; }
-.composer-add:disabled { opacity: 0.4; cursor: default; }
+.cmp-add:hover:not(:disabled) { background: #2C2F38; }
+.cmp-add:disabled { opacity: 0.4; cursor: default; }
+
+/* ---- toast ---- */
+.toast {
+  position: fixed; bottom: 92px; left: 50%; translate: -50% 0; z-index: 40;
+  background: #16181D; color: #fff; font-size: 13.5px; font-weight: 500;
+  padding: 10px 18px; border-radius: 999px;
+  box-shadow: 0 6px 24px rgba(20,20,40,0.2);
+}
+
+/* ---- custom calendar popover ---- */
+.cal-backdrop { position: fixed; inset: 0; z-index: 95; }
+.cal-pop {
+  position: fixed; /* left / width / bottom set inline to anchor above the date field */
+  background: #fff; border-radius: 18px; padding: 14px 14px 20px;
+  box-shadow: 0 16px 48px rgba(20,20,40,0.18), 0 2px 8px rgba(20,20,40,0.08);
+}
+.cal-head {
+  display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;
+}
+.cal-nav { width: 32px; height: 32px; }
+.cal-nav:disabled { opacity: 0.25; cursor: default; }
+.cal-nav:disabled:hover { background: transparent; }
+.cal-month { font-size: 15px; font-weight: 600; color: #16181D; }
+.cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
+.cal-weekdays { margin-bottom: 4px; }
+.cal-wd {
+  display: grid; place-items: center; height: 28px;
+  font-size: 11px; font-weight: 600; color: #B3B8C2;
+}
+.cal-day {
+  height: 34px; border: none; background: transparent; border-radius: 9px; cursor: pointer;
+  font-family: inherit; font-size: 13.5px; font-weight: 500; color: #2A2F3A;
+  transition: background 0.12s;
+}
+.cal-day:hover:not(:disabled) { background: #F2F3F5; }
+.cal-day:disabled { color: #D2D5DC; cursor: default; }
+.cal-day-sel, .cal-day-sel:hover { background: #16181D; color: #fff; }
 
 /* lightbox */
 .lb-backdrop {
-  position: fixed; inset: 0; z-index: 90; background: rgba(0,0,0,0.55);
+  position: fixed; inset: 0; z-index: 90; background: rgba(0,0,0,0.45);
+  -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px);
   display: grid; place-items: center; padding: 40px;
 }
 .lb-content {
@@ -242,32 +273,66 @@ body {
   max-width: 880px; max-height: 90vh;
 }
 .lb-close {
-  position: absolute; top: -14px; right: -14px; z-index: 5;
-  width: 38px; height: 38px; border: none; border-radius: 50%;
-  background: #fff; color: #4A5160; font-size: 20px; cursor: pointer;
+  position: absolute; top: -16px; right: -16px; z-index: 5;
+  width: 38px; height: 38px; border-radius: 50%;
+  background: #fff; color: #4A5160; cursor: pointer;
   box-shadow: 0 3px 12px rgba(0,0,0,0.2);
 }
-.lb-close:hover { color: #16181D; }
+.lb-close:hover { background: #fff; color: #16181D; }
 .lb-main { display: grid; place-items: center; }
-.lb-main img, .lb-main video { max-width: 800px; max-height: 70vh; border-radius: 14px; display: block; }
-.lb-strip {
-  display: flex; gap: 4px; max-width: 760px; overflow-x: auto; padding: 4px;
+.lb-main img, .lb-main video { max-width: 800px; max-height: 70vh; border-radius: 16px; display: block; }
+.lb-video { position: relative; }
+.lb-volume {
+  position: absolute; bottom: 14px; right: 14px;
+  width: 40px; height: 40px; border: none; border-radius: 50%;
+  background: rgba(20,20,30,0.55); color: #fff; cursor: pointer;
+  display: grid; place-items: center; backdrop-filter: blur(4px);
 }
-.lb-thumb { border: 2px solid transparent; border-radius: 8px; padding: 0; cursor: pointer; background: none; flex-shrink: 0; }
-.lb-thumb img { width: 60px; height: 60px; object-fit: cover; border-radius: 6px; display: block; }
-.lb-thumb-active { border-color: #fff; }
+.lb-volume:hover { background: rgba(20,20,30,0.75); }
+
+/* photo collage: overlapping prints at varied sizes + rotations */
+.lb-photo-wrap {
+  display: flex; flex-direction: column; align-items: center; gap: 28px;
+}
+.lb-collage {
+  position: relative;
+  width: min(1000px, 92vw); aspect-ratio: 3 / 2;
+  max-height: 78vh;
+}
+/* every print is the SAME 4:3 box (cover-cropped) so spacing is predictable
+   regardless of the image's own aspect — otherwise tall/square images blow
+   past their row and overlap massively */
+.lb-collage-img {
+  position: absolute;
+  aspect-ratio: 4 / 3; object-fit: cover;
+  border-radius: 16px;
+  box-shadow: 0 18px 50px rgba(0,0,0,0.35);
+}
 .lb-meta { text-align: center; color: #fff; max-width: 600px; }
 .lb-title { font-size: 18px; font-weight: 600; }
 .lb-date { font-size: 11px; font-weight: 600; letter-spacing: 0.08em; opacity: 0.7; margin-top: 6px; }
-.lb-body { font-size: 14.5px; line-height: 1.5; opacity: 0.92; margin-top: 10px; }
+
+/* audio player — Amie style */
 .lb-audio {
-  width: 460px; max-width: 86vw; border-radius: 20px; padding: 24px;
-  display: flex; flex-direction: column; gap: 14px;
+  width: 460px; max-width: 86vw; background: #fff; border-radius: 22px; padding: 26px 24px 20px;
+  display: flex; flex-direction: column; gap: 16px;
 }
-.lb-audio-top { display: flex; align-items: center; gap: 14px; color: #232936; }
-.lb-scrub { width: 100%; accent-color: #232936; cursor: pointer; }
-.lb-audio-time { font-size: 12px; color: #4A5160; font-variant-numeric: tabular-nums; }
-.lb-audio .audio-name { color: #4A5160; }
+.lb-wave {
+  position: relative; height: 80px;
+  display: flex; align-items: center; gap: 3px;
+}
+.lb-wave span { flex: 1; background: #16181D; border-radius: 2px; min-height: 4px; }
+.lb-wave-play {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  width: 64px; height: 64px; border: none; border-radius: 50%;
+  background: #16181D; color: #fff; cursor: pointer;
+  display: grid; place-items: center;
+  box-shadow: 0 6px 20px rgba(20,20,40,0.25);
+}
+.lb-scrub { width: 100%; accent-color: #16181D; cursor: pointer; }
+.lb-audio-foot { display: flex; align-items: center; justify-content: space-between; }
+.lb-audio-name { font-size: 14px; font-weight: 600; color: #16181D; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lb-audio-time { font-size: 12px; color: #6B7280; font-variant-numeric: tabular-nums; flex-shrink: 0; margin-left: 12px; }
 
 /* ---- polaroid photos ---- */
 .polaroid {
@@ -281,66 +346,15 @@ body {
 }
 
 /* ---- quote cards ---- */
-.card-quote { width: 340px; background: transparent; box-shadow: none; padding: 8px; }
-.quote-text {
-  font-family: 'Newsreader', Georgia, serif; font-style: italic;
-  font-size: 28px; line-height: 1.32; color: #232936; letter-spacing: 0.005em;
-}
+.card-quote { background: transparent; box-shadow: none; padding: 8px 6px; }
 
-/* ---- editing ---- */
-.card-editing { box-shadow: 0 8px 28px rgba(20,20,40,0.10); z-index: 40; cursor: default; }
-
-.edit-title, .edit-body, .edit-quote {
-  width: 100%; border: none; background: transparent; resize: none;
-  font-family: inherit; outline: none; padding: 0;
-}
-.edit-title { font-size: 17px; font-weight: 600; line-height: 1.3; }
-.edit-title::placeholder { color: rgba(40, 50, 80, 0.32); }
-.edit-body { font-size: 13.5px; line-height: 1.45; color: #4A5160; margin-top: 9px; }
-.edit-body::placeholder { color: #ACB2BE; }
-.edit-quote {
-  font-family: 'Newsreader', Georgia, serif; font-style: italic;
-  font-size: 26px; line-height: 1.32; color: #232936;
-}
-.edit-quote::placeholder { color: #C9CDD6; }
-
-.edit-toolbar {
-  display: flex; align-items: center; gap: 7px;
-  margin-top: 14px; padding-top: 11px;
-  border-top: 1px solid rgba(20, 20, 40, 0.07);
-}
-.dot {
-  width: 15px; height: 15px; border-radius: 50%;
-  border: 2px solid transparent; cursor: pointer; padding: 0;
-  transition: transform 0.12s;
-}
-.dot:hover { transform: scale(1.25); }
-.dot-active { border-color: #fff; box-shadow: 0 0 0 1.5px rgba(20,20,40,0.35); }
-
-.type-toggle {
-  margin-left: 2px; border: none; background: rgba(255,255,255,0.6);
-  font-family: 'Newsreader', Georgia, serif; font-style: italic; font-weight: 500;
-  font-size: 13px; border-radius: 7px; padding: 2px 7px; cursor: pointer; color: #4A5160;
-}
-.type-toggle-active { background: #232936; color: #fff; }
-
-.toolbar-delete, .toolbar-done {
-  border: none; background: transparent; cursor: pointer;
-  font-size: 13px; padding: 2px 5px; border-radius: 7px;
-}
-.toolbar-done { margin-left: auto; background: #232936; color: #fff; font-weight: 700; padding: 3px 10px; }
-.toolbar-delete { opacity: 0.55; }
-.toolbar-delete:hover { opacity: 1; }
-
-/* ---- drop indicator ---- */
-.drop-line {
-  position: fixed; top: 0; bottom: 0; width: 0; z-index: 60;
-  border-left: 2px dashed #2563EB; pointer-events: none;
-}
-.drop-chip {
-  position: absolute; top: 96px; left: 8px;
-  background: #2563EB; color: #fff; font-size: 12px; font-weight: 600;
-  padding: 4px 10px; border-radius: 999px; white-space: nowrap;
+/* quote = a handwritten note: highlight strips only */
+.quote-note { position: relative; padding: 6px 2px; transform: rotate(-1.5deg); }
+.quote-strips {
+  font-family: 'Caveat', cursive; font-weight: 500;
+  font-size: 27px; line-height: 1.62; letter-spacing: 0.01em;
+  padding: 1px 10px;
+  box-decoration-break: clone; -webkit-box-decoration-break: clone;
 }
 
 /* ---- bottom dock: morphs between the zoom toolbar and the composer ---- */
@@ -399,12 +413,6 @@ body {
 .canvas3d-container {
   position: absolute; inset: 0; touch-action: none;
 }
-.orbit-year-top {
-  position: absolute; top: 44px; left: 50%; transform: translateX(-50%);
-  font-size: 22px; font-weight: 600; letter-spacing: -0.01em;
-  color: #1A1E27; user-select: none; z-index: 10; pointer-events: none;
-}
-
 /* ---- orbit modal ---- */
 .orbit-backdrop {
   position: fixed; inset: 0; z-index: 80;

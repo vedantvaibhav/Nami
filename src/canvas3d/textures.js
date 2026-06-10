@@ -2,6 +2,7 @@
 // notes and quotes are painted onto offscreen canvases so *everything* is a card.
 import { COLORS, imageURL } from '../store.js'
 import { cardDateLabel } from '../time.js'
+import { inferType, firstImageId } from '../media.js'
 
 const wrapText = (ctx, text, maxWidth) => {
   const words = (text || '').split(/\s+/).filter(Boolean)
@@ -64,20 +65,35 @@ function paintNote(m) {
   return { url: c.toDataURL('image/png'), width: W, height: H }
 }
 
+// quotes paint as the pinned handwritten note: colour strips behind each line
 function paintQuote(m) {
+  const color = COLORS[m.color] || COLORS.blue
   const W = 720
-  const H = 420
+  const H = 460
+  const lineH = 66
   const c = document.createElement('canvas')
   c.width = W
   c.height = H
   const ctx = c.getContext('2d')
 
-  ctx.fillStyle = '#232936'
-  ctx.font = 'italic 500 52px Newsreader, Georgia, serif'
+  ctx.font = '500 46px Caveat, cursive'
   ctx.textAlign = 'center'
-  const lines = wrapText(ctx, m.title || '…', W - 80).slice(0, 5)
-  const startY = H / 2 - ((lines.length - 1) * 64) / 2
-  lines.forEach((l, i) => ctx.fillText(l, W / 2, startY + i * 64))
+  const lines = wrapText(ctx, m.title || '…', W - 160).slice(0, 5)
+  const startY = H / 2 - ((lines.length - 1) * lineH) / 2
+  const jitterFor = (i) => ((i * 37) % 21) - 10 // ragged strip edges
+  const stripFor = (l, i) => {
+    const w = ctx.measureText(l).width
+    const j = jitterFor(i)
+    return { x: W / 2 - w / 2 - 18 + j, y: startY + i * lineH - 38, w: w + 36, h: 54, j }
+  }
+
+  lines.forEach((l, i) => {
+    const s = stripFor(l, i)
+    ctx.fillStyle = color.bg
+    ctx.fillRect(s.x, s.y, s.w, s.h)
+    ctx.fillStyle = color.text
+    ctx.fillText(l, W / 2 + s.j, startY + i * lineH)
+  })
 
   return { url: c.toDataURL('image/png'), width: W, height: H }
 }
@@ -91,7 +107,7 @@ const imgDimensions = (url) =>
   })
 
 async function photoItem(m) {
-  const url = await imageURL(m.imgId)
+  const url = await imageURL(firstImageId(m))
   if (!url) return null
   const dims = await imgDimensions(url)
   return { url, ...dims }
@@ -102,10 +118,11 @@ export async function buildMediaItems(memories) {
   const items = []
   for (const m of memories) {
     if (m.draft) continue
+    const type = inferType(m)
     let item = null
-    if (m.type === 'photo' && m.imgId) item = await photoItem(m)
-    else if (m.type === 'quote') item = paintQuote(m)
-    else item = paintNote(m)
+    if (type === 'photo') item = await photoItem(m)
+    else if (type === 'quote') item = paintQuote(m)
+    else item = paintNote(m) // notes, video, audio → painted card
     if (item) items.push({ ...item, memory: m })
   }
   return items

@@ -1,13 +1,12 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, animate, motion, useMotionValue } from 'framer-motion'
-import MemoryCard, { Icon } from './MemoryCard.jsx'
+import MemoryCard from './MemoryCard.jsx'
 import YearOrbit from './YearOrbit.jsx'
 import Lightbox from './Lightbox.jsx'
 import Composer from './Composer.jsx'
-import { seedMemories } from './seed.js'
 import { loadMemories, saveMemories, saveImage, deleteImage, COLOR_KEYS } from './store.js'
-import { icons, kindFromMime, MAX_SAFE_BYTES } from './media.js'
-import { ZOOMS, getRange, getMarkers, xForDate, dateAtX, markerLabel, addDays, toISO, unitStart, colUnitDays, renderEnd, DAY } from './time.js'
+import { kindFromMime, MAX_SAFE_BYTES } from './media.js'
+import { ZOOMS, markerLabel, toISO, fromISO, unitStart } from './time.js'
 
 const MARKER_H = 130 // px reserved at top for date markers
 // One shared, unhurried spring for everything the pill does — slow and liquidy
@@ -15,35 +14,48 @@ const LIQUID = { type: 'spring', stiffness: 170, damping: 26, mass: 1 }
 // The dock morph — each direction tuned separately
 const SHELL_OPEN = { type: 'spring', stiffness: 250, damping: 30, mass: 1 }      // lively, settles a bit quicker
 const SHELL_CLOSE = { type: 'spring', stiffness: 190, damping: 32, mass: 1.05 }  // slow, liquid settle
-const clampY = (y) => Math.max(MARKER_H + 20, Math.min(y, window.innerHeight - 220))
 
 // A card is worth keeping if it has a title, body, or any media
 const isEmpty = (m) => !m.title?.trim() && !m.body?.trim() && !(m.media?.length)
 
+// view cross-fade: bouncy spring on scale, clean tween on opacity
+// (a spring on opacity would overshoot past 1 and flicker)
+const VIEW_SWAP = {
+  scale: { type: 'spring', stiffness: 300, damping: 16, mass: 0.9 },
+  opacity: { duration: 0.3, ease: 'easeOut' },
+}
+
+const DAY_LIMIT = 2 // max memories per day
+const COL_W = 340 // fixed column width — populated dates lay out sequentially
+
 export default function App() {
   const [memories, setMemories] = useState(null)
   const [zoomIdx, setZoomIdx] = useState(2) // open in Years view on load
-  const [editingId, setEditingId] = useState(null)
-  const editingIdRef = useRef(null)
-  // keep a ref in lockstep so handlers never read a stale editingId closure
-  const setEditing = useCallback((id) => { editingIdRef.current = id; setEditingId(id) }, [])
   const [openId, setOpenId] = useState(null) // lightbox
   const [composerOpen, setComposerOpen] = useState(false)
   const [composerKey, setComposerKey] = useState(0) // remount composer fresh on each open
   const toolbarRef = useRef(null)
   const composerRef = useRef(null)
   const sizeMorph = useRef(false) // animate the shell size only during a composer open/close
-  const [dockDims, setDockDims] = useState({ toolbarW: 462, composerH: 290 })
-  const [dropHint, setDropHint] = useState(null) // clientX while dragging a file over
+  const [dockDims, setDockDims] = useState({ toolbarW: 462, composerH: 450 })
+  const [toast, setToast] = useState(null)
+  const toastTimer = useRef(null)
   const scrollRef = useRef(null)
-  const colorCursor = useRef(Math.floor(Math.random() * COLOR_KEYS.length))
 
   const zoom = ZOOMS[zoomIdx]
+  const isYears = zoom.id === 'years'
+  // ref mirror for stable callbacks (syncThumb) — both views stay mounted now,
+  // so "is the orbit active" can't be inferred from scrollRef being null anymore.
+  // useLayoutEffect (declared before the zoom-restore effect below) so it's
+  // fresh before any same-pass layout work reads it.
+  const zoomIdRef = useRef(zoom.id)
+  useLayoutEffect(() => { zoomIdRef.current = zoom.id }, [zoom.id])
 
   // ---- load / persist -------------------------------------------------
   useEffect(() => {
-    loadMemories().then(async (saved) => {
-      const list = saved && saved.length ? saved : await seedMemories()
+    loadMemories().then((saved) => {
+      // start empty — only days the user actually adds to will appear
+      const list = saved && saved.length ? saved : []
       // migrate legacy single-image cards (imgId) to the media[] model
       setMemories(
         list.map((m) =>
@@ -55,26 +67,50 @@ export default function App() {
     })
   }, [])
 
-  // debounced autosave (800ms) — persists every non-empty card, drafts included,
-  // so media attached before commit survives a reload
+  // debounced autosave (800ms) — persists every non-empty card, dropping the
+  // transient warnLarge flag so it never reaches storage
   useEffect(() => {
     if (!memories) return
     const t = setTimeout(() => {
-      saveMemories(memories.filter((m) => !isEmpty(m)).map(({ draft, warnLarge, ...keep }) => keep))
+      saveMemories(memories.filter((m) => !isEmpty(m)).map(({ warnLarge, ...keep }) => keep))
     }, 800)
     return () => clearTimeout(t)
   }, [memories])
 
   // ---- timeline geometry ----------------------------------------------
-  const range = useMemo(() => getRange(memories || []), [memories])
-  // the canvas extends to the end of today's column at this zoom (full
-  // current month/year), but interactions clamp to today
-  const canvasEnd = useMemo(() => renderEnd(zoom.id), [zoom.id])
-  const widthPx = Math.ceil(((canvasEnd - range.start) / DAY) * zoom.pxPerDay)
-  const markers = useMemo(
-    () => getMarkers(range.start, canvasEnd, zoom.id),
-    [range.start.getTime(), canvasEnd.getTime(), zoom.id]
-  )
+  // Days: sparse — only days with memories become columns.
+  // Months: continuous — every month from Jan of the earliest year through
+  // the current month (empty months show too), growing as time passes.
+  const columns = useMemo(() => {
+    if (!memories) return []
+    const groups = new Map()
+    for (const m of memories) {
+      const k = unitStart(m.date, zoom.id)
+      if (!groups.has(k)) groups.set(k, [])
+      groups.get(k).push(m)
+    }
+
+    let keys
+    if (zoom.id === 'months') {
+      const today = new Date()
+      let earliestYear = today.getFullYear()
+      for (const m of memories) earliestYear = Math.min(earliestYear, fromISO(m.date).getFullYear())
+      keys = []
+      let d = new Date(earliestYear, 0, 1)
+      const end = new Date(today.getFullYear(), today.getMonth(), 1)
+      while (d <= end) { keys.push(toISO(d)); d = new Date(d.getFullYear(), d.getMonth() + 1, 1) }
+    } else {
+      keys = [...groups.keys()].sort() // ISO dates sort chronologically
+    }
+
+    return keys.map((k, i) => {
+      // chronological within a column (months can span several dates)
+      const items = (groups.get(k) || []).slice().sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0))
+      return { key: k, colX: i * COL_W, colW: COL_W, items }
+    })
+  }, [memories, zoom.id])
+
+  const widthPx = Math.max(columns.length * COL_W, 1)
 
   // start at the very end — today is the rightmost column.
   // useLayoutEffect so the pill is sized correctly BEFORE first paint
@@ -100,8 +136,9 @@ export default function App() {
   const morphAnim = useRef(null)
 
   const syncThumb = useCallback((smooth = false) => {
-    const el = scrollRef.current
-    // no scroller (orbit view) -> pill fills the whole track
+    // in the orbit (Years) view the pill fills the whole track — the scroller
+    // is still mounted (hidden layer), so gate on the zoom, not on the ref
+    const el = zoomIdRef.current === 'years' ? null : scrollRef.current
     const frac = el ? el.clientWidth / el.scrollWidth : 1
     const w = Math.max(64, Math.min(TRACK_W, Math.round(TRACK_W * frac)))
     thumbWTarget.current = w
@@ -175,24 +212,25 @@ export default function App() {
   const pendingCenter = useRef(null)
   const setZoomKeepCenter = (idx) => {
     const el = scrollRef.current
-    if (el) pendingCenter.current = (el.scrollLeft + el.clientWidth / 2) / zoom.pxPerDay
+    // preserve scroll *fraction* across zooms (columns re-lay-out by count)
+    if (el) {
+      const maxScroll = el.scrollWidth - el.clientWidth
+      pendingCenter.current = maxScroll > 0 ? el.scrollLeft / maxScroll : 0
+    }
     setZoomIdx(idx)
   }
 
-  // restore the anchored center right after the canvas re-renders at the new
-  // scale — and only THEN morph the pill, so it lands where the view actually is
+  // restore the anchored fraction right after the canvas re-renders, then morph the pill
   useLayoutEffect(() => {
     const el = scrollRef.current
     if (el && pendingCenter.current !== null) {
-      el.scrollLeft = pendingCenter.current * zoom.pxPerDay - el.clientWidth / 2
+      el.scrollLeft = pendingCenter.current * (el.scrollWidth - el.clientWidth)
       pendingCenter.current = null
     }
     syncThumb(true)
   }, [zoomIdx, widthPx, syncThumb])
 
   // ---- mutations -------------------------------------------------------
-  const update = (next) => setMemories((ms) => ms.map((m) => (m.id === next.id ? next : m)))
-
   const removeMemory = useCallback((id) => {
     setMemories((ms) => {
       const m = ms.find((x) => x.id === id)
@@ -200,55 +238,23 @@ export default function App() {
       if (m?.imgId) deleteImage(m.imgId)
       return ms.filter((x) => x.id !== id)
     })
-    if (editingIdRef.current === id) setEditing(null)
     setOpenId((cur) => (cur === id ? null : cur))
-  }, [setEditing])
+  }, [])
 
-  // id is passed in explicitly by the card being edited — never from a closure/ref
-  const commitEditing = useCallback((id = editingIdRef.current) => {
-    if (!id) return
-    setMemories((ms) =>
-      ms
-        .filter((m) => !(m.id === id && isEmpty(m))) // discard empty
-        .map((m) => (m.id === id ? { ...m, draft: false } : m))
-    )
-    if (editingIdRef.current === id) setEditing(null)
-  }, [setEditing])
-
-  const cancelEditing = useCallback((id = editingIdRef.current) => {
-    setMemories((ms) => {
-      const m = ms.find((x) => x.id === id)
-      if (m?.draft) m.media?.forEach((x) => deleteImage(x.id))
-      return ms.filter((x) => !(x.id === id && x.draft))
-    })
-    if (editingIdRef.current === id) setEditing(null)
-  }, [setEditing])
-
-  const cycleColor = (id) =>
-    setMemories((ms) =>
-      ms.map((m) =>
-        m.id === id ? { ...m, color: COLOR_KEYS[(COLOR_KEYS.indexOf(m.color) + 1) % COLOR_KEYS.length] } : m
-      )
-    )
-
-  const setCardDate = (id, iso) =>
-    setMemories((ms) => ms.map((m) => (m.id === id ? { ...m, date: iso } : m)))
-
-  const nextColor = () => COLOR_KEYS[colorCursor.current++ % COLOR_KEYS.length]
+  // completely random pastel from the palette; fixed once assigned
+  const nextColor = () => COLOR_KEYS[Math.floor(Math.random() * COLOR_KEYS.length)]
   const todayISO = () => toISO(new Date())
 
-  // Anchor date for a new card: today if its column is on-screen, else the
-  // nearest visible day. Timeline always reaches today, so today is the default.
-  const anchorDate = () => {
-    const el = scrollRef.current
-    if (!el) return todayISO()
-    const todayX = xForDate(todayISO(), range.start, zoom.pxPerDay)
-    const visible = todayX >= el.scrollLeft && todayX <= el.scrollLeft + el.clientWidth
-    if (visible) return todayISO()
-    const centerX = el.scrollLeft + el.clientWidth / 2
-    const iso = dateAtX(centerX, range.start, zoom.pxPerDay)
-    return iso > todayISO() ? todayISO() : iso
+  // how many memories already sit on a date
+  const countOn = (iso) => memories.filter((m) => m.date === iso).length
+  const showToast = (msg) => {
+    setToast(msg)
+    clearTimeout(toastTimer.current)
+    toastTimer.current = setTimeout(() => setToast(null), 2400)
   }
+
+  // New cards default to today; the composer's date picker lets the user change it.
+  const anchorDate = () => todayISO()
 
   const blankCard = (date) => ({
     id: crypto.randomUUID(),
@@ -257,37 +263,23 @@ export default function App() {
     body: '',
     date,
     color: nextColor(),
-    y: clampY(window.innerHeight * 0.4),
-    tilt: 0,
     media: [],
-    draft: true,
   })
 
-  // The + button: save any in-progress card, then spawn a fresh blank in edit mode
-  const addCard = (preMedia) => {
-    // Years view has no editable timeline yet — wiring TBD; show button only
-    if (zoom.id === 'years') return
-    if (editingIdRef.current) commitEditing()
-    const card = blankCard(anchorDate())
-    if (preMedia) card.media = preMedia
-    setMemories((ms) => [...ms, card])
-    setEditing(card.id)
-    setOpenId(null)
-  }
-
-  // commit a finished memory from the morphing composer form
-  const addFromComposer = ({ title, body, date, time, media }) => {
+  // commit a finished memory from the morphing composer form.
+  // name only -> quote; name + note -> coloured card; media -> photo/video/audio
+  const addFromComposer = ({ title, body, date, media }) => {
+    if (countOn(date) >= DAY_LIMIT) { showToast(`Only ${DAY_LIMIT} memories per day`); return }
+    const hasMedia = media && media.length
+    const isQuote = !hasMedia && title && !body
     const card = {
       id: crypto.randomUUID(),
-      type: 'note',
+      type: isQuote ? 'quote' : 'note',
       title,
       body,
       date,
-      time: time || null,
       media: media || [],
-      color: nextColor(),
-      y: clampY(window.innerHeight * 0.4),
-      tilt: 0,
+      color: nextColor(), // random, fixed — not user-changeable
     }
     setMemories((ms) => [...ms, card])
     sizeMorph.current = true
@@ -295,7 +287,6 @@ export default function App() {
   }
 
   const openComposer = () => {
-    if (editingIdRef.current) commitEditing()
     setOpenId(null)
     setComposerKey((k) => k + 1) // fresh form each open
     sizeMorph.current = true
@@ -329,7 +320,13 @@ export default function App() {
     const tooLarge = accepted.some(({ file }) => file.size > MAX_SAFE_BYTES)
     setMemories((ms) => ms.map((m) => (m.id === id ? { ...m, warnLarge: tooLarge } : m)))
 
+    const existingImgs = memories?.find((m) => m.id === id)?.media?.filter((x) => x.kind === 'image').length || 0
+    let imgRoom = 4 - existingImgs // cap images at 4
     for (const { file, kind } of accepted) {
+      if (kind === 'image') {
+        if (imgRoom <= 0) continue
+        imgRoom--
+      }
       const mediaId = crypto.randomUUID()
       try {
         await saveImage(mediaId, file)
@@ -346,153 +343,97 @@ export default function App() {
     }
   }
 
-  const moveCard = (id, dx, dy) => {
-    setMemories((ms) =>
-      ms.map((m) => {
-        if (m.id !== id) return m
-        const days = Math.round(dx / zoom.pxPerDay)
-        const d = addDays(new Date(m.date + 'T00:00'), days)
-        let iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-        if (iso > todayISO()) iso = todayISO() // no future memories
-        return { ...m, date: iso, y: clampY(m.y + dy) }
-      })
-    )
-  }
-
-  // live date label while dragging a card horizontally
-  const dragDateFor = (m, dx) => {
-    const days = Math.round(dx / zoom.pxPerDay)
-    const d = addDays(new Date(m.date + 'T00:00'), days)
-    let iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-    if (iso > todayISO()) iso = todayISO()
-    return iso
-  }
-
   // ---- canvas interactions ----------------------------------------------
-  const onCanvasClick = (e) => {
-    if (e.target !== e.currentTarget) return
-    if (editingIdRef.current) commitEditing()
-  }
-
+  // dropped/pasted files become a memory on today directly (no inline editing)
   const onDrop = async (e) => {
     e.preventDefault()
-    setDropHint(null)
-    if (!scrollRef.current) return // orbit view: no drop target
+    if (zoom.id === 'years') return // orbit view: no drop target
     const files = [...(e.dataTransfer?.files || [])]
     if (!files.length) return
-    if (editingIdRef.current) return attachFiles(editingIdRef.current, files)
+    if (countOn(anchorDate()) >= DAY_LIMIT) { showToast(`Only ${DAY_LIMIT} memories per day`); return }
     const card = blankCard(anchorDate())
     setMemories((ms) => [...ms, card])
-    setEditing(card.id)
     attachFiles(card.id, files)
   }
 
-  // paste an image -> attach to the editing card, else spawn a new card with it
   useEffect(() => {
     const onPaste = async (e) => {
       const item = [...(e.clipboardData?.items || [])].find((i) => i.type.startsWith('image/'))
       if (!item) return
-      const file = item.getAsFile()
-      if (editingIdRef.current) return attachFiles(editingIdRef.current, [file])
+      if (countOn(anchorDate()) >= DAY_LIMIT) { showToast(`Only ${DAY_LIMIT} memories per day`); return }
       const card = blankCard(anchorDate())
       setMemories((ms) => [...ms, card])
-      setEditing(card.id)
-      attachFiles(card.id, [file])
+      attachFiles(card.id, [item.getAsFile()])
     }
     window.addEventListener('paste', onPaste)
     return () => window.removeEventListener('paste', onPaste)
-  })
+  }, [memories])
 
   if (!memories) return <div className="loading">…</div>
 
   const openCard = memories.find((m) => m.id === openId)
 
   return (
-    <div
-      className="viewport"
-      onDragOver={(e) => { e.preventDefault(); setDropHint(e.clientX) }}
-      onDragLeave={() => setDropHint(null)}
-      onDrop={onDrop}
-    >
-      {zoom.id === 'years' ? (
-        <YearOrbit memories={memories} year={new Date().getFullYear()} />
-      ) : (
+    <div className="viewport" onDragOver={(e) => e.preventDefault()} onDrop={onDrop}>
+      {/* Both views stay mounted and cross-fade — remounting the 3D canvas on
+          every Months↔Years switch (WebGL context + shaders + textures) was
+          the source of the switch lag. Hidden layer is visibility:hidden and
+          the orbit's frameloop pauses, so it costs nothing while inactive. */}
+      {/* hidden layers stay opacity-0 but PAINTED — flipping visibility forced a
+          full timeline repaint in the same frame the pill morph starts (hitch) */}
+      <motion.div
+        className={`view-layer ${isYears ? 'view-layer-off' : ''}`}
+        initial={false}
+        animate={isYears ? { opacity: 0, scale: 0.97 } : { opacity: 1, scale: 1 }}
+        transition={VIEW_SWAP}
+      >
       <div className="scroller" ref={scrollRef}>
-        <div className="canvas" style={{ width: widthPx }} onClick={onCanvasClick}>
+        <div className="canvas" style={{ width: widthPx }}>
           <div className="topline" />
-          {markers.map((d, i) => {
-            const x = Math.round(((d - range.start) / DAY) * zoom.pxPerDay)
-            const nextX =
-              i + 1 < markers.length
-                ? Math.round(((markers[i + 1] - range.start) / DAY) * zoom.pxPerDay)
-                : widthPx
+          {columns.map(({ key, colX }) => {
+            const d = fromISO(key)
             return (
-              <div key={d.getTime()}>
-                <div className="gridline" style={{ left: x }} />
-                <div className="marker" style={{ left: (x + nextX) / 2 }}>
-                  {zoom.id === 'years' ? (
-                    <div className="marker-day">{d.getFullYear()}</div>
-                  ) : (
-                    <>
-                      <div className="marker-day">{markerLabel(d, zoom.id)}</div>
-                      <div className="marker-year">{d.getFullYear()}</div>
-                    </>
-                  )}
+              <div key={`m-${key}`}>
+                <div className="gridline" style={{ left: colX }} />
+                <div className="marker" style={{ left: colX + COL_W / 2 }}>
+                  <div className="marker-day">{markerLabel(d, zoom.id)}</div>
+                  <div className="marker-year">{d.getFullYear()}</div>
                 </div>
               </div>
             )
           })}
 
-          <AnimatePresence>
-            {memories.map((m) => {
-              // cards snap into their day/month/year column, Amie-style:
-              // left edge at column start + inset, width fits the column
-              const colX = xForDate(unitStart(m.date, zoom.id), range.start, zoom.pxPerDay)
-              const colEnd = Math.min(
-                xForDate(unitStart(m.date, zoom.id), range.start, zoom.pxPerDay) +
-                  Math.round(colUnitDays(m.date, zoom.id) * zoom.pxPerDay),
-                widthPx
-              )
-              const cardW = Math.min(colEnd - colX - 16, 400)
-              return (
-              <MemoryCard
-                key={m.id}
-                m={m}
-                x={colX + 8}
-                w={cardW}
-                pxPerDay={zoom.pxPerDay}
-                editing={m.id === editingId}
-                onEdit={setEditing}
-                onChange={update}
-                onCommit={() => commitEditing(m.id)}
-                onCancel={() => cancelEditing(m.id)}
-                onDelete={removeMemory}
-                onMove={moveCard}
-                onOpen={setOpenId}
-                onAttach={attachFiles}
-                onCycleColor={cycleColor}
-                onSetDate={setCardDate}
-                dragDateFor={dragDateFor}
-              />
-              )
-            })}
-          </AnimatePresence>
+          {columns.map(({ key, colX, items }) => (
+            <div
+              key={key}
+              className="column"
+              style={{ left: colX + 8, top: MARKER_H + 20, width: COL_W - 16 }}
+            >
+              <AnimatePresence>
+                {items.map((m, idx) => (
+                  <MemoryCard
+                    key={m.id}
+                    m={m}
+                    index={idx}
+                    onDelete={removeMemory}
+                    onOpen={setOpenId}
+                  />
+                ))}
+              </AnimatePresence>
+            </div>
+          ))}
         </div>
       </div>
-      )}
+      </motion.div>
 
-      {dropHint !== null && (
-        <div className="drop-line" style={{ left: dropHint }}>
-          <span className="drop-chip">
-            {markerLabel(
-              new Date(
-                dateAtX(dropHint + (scrollRef.current?.scrollLeft || 0), range.start, zoom.pxPerDay) + 'T00:00'
-              ),
-              'days'
-            )}
-          </span>
-        </div>
-      )}
+      <motion.div
+        className={`view-layer ${isYears ? '' : 'view-layer-off'}`}
+        initial={false}
+        animate={isYears ? { opacity: 1, scale: 1 } : { opacity: 0, scale: 1.03 }}
+        transition={VIEW_SWAP}
+      >
+        <YearOrbit memories={memories} active={isYears} />
+      </motion.div>
 
       <div className="dock-wrap">
         <motion.div
@@ -511,7 +452,11 @@ export default function App() {
             // size only animates during an actual open/close morph; on load /
             // self-measurement it snaps instantly so the bar just appears
             width: sizeMorph.current ? (composerOpen ? SHELL_OPEN : SHELL_CLOSE) : { duration: 0 },
-            height: sizeMorph.current ? (composerOpen ? SHELL_OPEN : SHELL_CLOSE) : { duration: 0 },
+            // height: morph spring during open/close; while open, content changes
+            // (e.g. a photo is added) animate gently instead of jumping
+            height: sizeMorph.current
+              ? (composerOpen ? SHELL_OPEN : SHELL_CLOSE)
+              : (composerOpen ? { type: 'spring', stiffness: 300, damping: 30 } : { duration: 0 }),
           }}
           onAnimationComplete={() => { sizeMorph.current = false }}
         >
@@ -577,6 +522,20 @@ export default function App() {
           </motion.div>
         </motion.div>
       </div>
+
+      <AnimatePresence>
+        {toast && (
+          <motion.div
+            className="toast"
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 8 }}
+            transition={{ duration: 0.2, ease: 'easeOut' }}
+          >
+            {toast}
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <AnimatePresence>
         {openCard && <Lightbox key={openCard.id} m={openCard} onClose={() => setOpenId(null)} />}

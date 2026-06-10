@@ -31,6 +31,13 @@ export const seededTilt = (id, i = 0, range = 4) => {
   return +((((Math.abs(h) % 1000) / 1000) * 2 - 1) * range).toFixed(2)
 }
 
+// Deterministic 0..1 fraction from any string — for stable "random" layout
+export const seedFrac = (s) => {
+  let h = 0
+  for (let k = 0; k < s.length; k++) h = ((h << 5) - h + s.charCodeAt(k)) | 0
+  return (Math.abs(h) % 1000) / 1000
+}
+
 // Deterministic waveform bars from id — visual chrome, not real data
 export const seededBars = (id, count = 28) => {
   const bars = []
@@ -82,6 +89,11 @@ export const icons = {
   upload: 'M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2 -2v-2 M7 9l5 -5l5 5 M12 4v12',
   play: 'M7 4v16l13 -8z',
   pause: 'M6 5h4v14h-4z M14 5h4v14h-4z',
-  grip: 'M9 5a1 1 0 1 0 2 0a1 1 0 1 0 -2 0 M9 12a1 1 0 1 0 2 0a1 1 0 1 0 -2 0 M9 19a1 1 0 1 0 2 0a1 1 0 1 0 -2 0 M14 5a1 1 0 1 0 2 0a1 1 0 1 0 -2 0 M14 12a1 1 0 1 0 2 0a1 1 0 1 0 -2 0 M14 19a1 1 0 1 0 2 0a1 1 0 1 0 -2 0',
   plus: 'M12 5v14 M5 12h14',
+  close: 'M18 6l-12 12 M6 6l12 12',
+  calendar: 'M4 7a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v12a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2z M16 3v4 M8 3v4 M4 11h16',
+  chevronL: 'M15 6l-6 6l6 6',
+  chevronR: 'M9 6l6 6l-6 6',
+  volume: 'M6 9v6h3l4 4V5l-4 4z M16 9a3 3 0 0 1 0 6 M19 7a7 7 0 0 1 0 10',
+  mute: 'M6 9v6h3l4 4V5l-4 4z M16 10l4 4 M20 10l-4 4',
 }
