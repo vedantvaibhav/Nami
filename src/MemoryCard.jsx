@@ -34,7 +34,7 @@ export const Icon = ({ d, size = 16, stroke = 1.8, className = '' }) => (
 function StackImg({ id, style }) {
   const url = useImage(id)
   if (!url) return null
-  return <img className="stack-img" style={style} src={url} alt="" draggable={false} />
+  return <img className="stack-img" style={style} src={url} alt="" draggable={false} decoding="async" />
 }
 
 // multiple photos = a deck pinned in ONE spot: every print fills the card and
@@ -45,7 +45,7 @@ function PhotoBlock({ m }) {
   const topUrl = useImage(images[0]?.id)
   if (!topUrl) return null
   if (images.length === 1) {
-    return <img className="card-photo" src={topUrl} alt={m.title || 'memory'} draggable={false} />
+    return <img className="card-photo" src={topUrl} alt={m.title || 'memory'} draggable={false} decoding="async" />
   }
   const n = images.length
   return (
