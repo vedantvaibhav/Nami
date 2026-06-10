@@ -6,7 +6,7 @@ import Lightbox from './Lightbox.jsx'
 import Composer from './Composer.jsx'
 import { loadMemories, saveMemories, saveImage, deleteImage, COLOR_KEYS } from './store.js'
 import { kindFromMime, MAX_SAFE_BYTES } from './media.js'
-import { ZOOMS, markerLabel, addDays, toISO, fromISO, unitStart } from './time.js'
+import { ZOOMS, markerLabel, toISO, fromISO, unitStart } from './time.js'
 
 const MARKER_H = 130 // px reserved at top for date markers
 // One shared, unhurried spring for everything the pill does — slow and liquidy
@@ -67,12 +67,12 @@ export default function App() {
     })
   }, [])
 
-  // debounced autosave (800ms) — persists every non-empty card, drafts included,
-  // so media attached before commit survives a reload
+  // debounced autosave (800ms) — persists every non-empty card, dropping the
+  // transient warnLarge flag so it never reaches storage
   useEffect(() => {
     if (!memories) return
     const t = setTimeout(() => {
-      saveMemories(memories.filter((m) => !isEmpty(m)).map(({ draft, warnLarge, ...keep }) => keep))
+      saveMemories(memories.filter((m) => !isEmpty(m)).map(({ warnLarge, ...keep }) => keep))
     }, 800)
     return () => clearTimeout(t)
   }, [memories])
@@ -268,7 +268,7 @@ export default function App() {
 
   // commit a finished memory from the morphing composer form.
   // name only -> quote; name + note -> coloured card; media -> photo/video/audio
-  const addFromComposer = ({ title, body, date, time, media }) => {
+  const addFromComposer = ({ title, body, date, media }) => {
     if (countOn(date) >= DAY_LIMIT) { showToast(`Only ${DAY_LIMIT} memories per day`); return }
     const hasMedia = media && media.length
     const isQuote = !hasMedia && title && !body
@@ -278,7 +278,6 @@ export default function App() {
       title,
       body,
       date,
-      time: time || null,
       media: media || [],
       color: nextColor(), // random, fixed — not user-changeable
     }

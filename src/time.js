@@ -1,5 +1,3 @@
-export const DAY = 86400000
-
 export const ZOOMS = [
   { id: 'days', label: 'Days' },
   { id: 'months', label: 'Months' },
@@ -12,7 +10,6 @@ export const startOfDay = (d) => {
   return x
 }
 
-export const addDays = (d, n) => new Date(d.getTime() + n * DAY)
 
 export const toISO = (d) => {
   const x = startOfDay(d)

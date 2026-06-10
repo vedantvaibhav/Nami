@@ -148,7 +148,7 @@ export default function Composer({ active, defaultDate, onClose, onAdd }) {
   const canAdd = title.trim() || media.length
   const submit = () => {
     if (!canAdd) return
-    onAdd({ title: title.trim(), body: body.trim(), date, time: '', media })
+    onAdd({ title: title.trim(), body: body.trim(), date, media })
   }
   const onKeyDown = (e) => {
     if (e.key === 'Escape') onClose()

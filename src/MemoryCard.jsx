@@ -115,7 +115,7 @@ export function AudioBlock({ m, tall = false }) {
 
 // ---- the card --------------------------------------------------------------
 export default function MemoryCard({
-  m, editing, index = 0,
+  m, index = 0,
   onDelete, onOpen,
 }) {
   const type = inferType(m)

@@ -42,10 +42,8 @@ A **memory** object (stored in the `memories` array, persisted as a list):
   title: string,
   body: string,          // optional note text
   date: 'YYYY-MM-DD',    // day the memory belongs to (no future dates allowed)
-  time: string | null,   // currently unused (kept for future)
-  media: [{ id, kind, name }],  // kind: 'image' | 'video' | 'audio'; blob stored by id
+  media: [{ id, kind, name }],  // kind: 'image' | 'video' | 'audio'; blob stored by id (max 4 images)
   color: 'blue'|'yellow'|'pink'|'purple'|'mint'|'peach',  // fixed at creation
-  draft?: boolean,       // true while a card is being composed inline; not persisted
 }
 ```
 
@@ -55,7 +53,7 @@ A **memory** object (stored in the `memories` array, persisted as a list):
 - otherwise → `'note'` (pastel coloured card)
 
 **Storage** (`store.js`, idb-keyval):
-- `moments:list` → the array of (non-draft) memories
+- `moments:list` → the array of memories
 - `img:<mediaId>` → a `Blob` for each media item (images/video/audio all use this)
 - `imageURL(id)` returns a cached `URL.createObjectURL` for a blob
 
@@ -145,9 +143,9 @@ tracks scroll, and you can drag it. See `syncThumb` / `thumbX` / `thumbWmv`.
 
 - **New media type** → extend `kindFromMime` + `inferType` + a `*Block` in `MemoryCard`
   + a `*Expand` in `Lightbox`.
-- **New card content** → add to the memory object, render in `MemoryCard` (resting +
-  edit) and in the composer if user-editable; remember to persist (it auto-saves via the
-  debounced effect — just don't store transient fields like `draft`).
+- **New card content** → add to the memory object, render it in `MemoryCard` and add an
+  input to the composer (the only add path — there is no inline editing); it auto-saves
+  via the debounced effect, which strips transient flags like `warnLarge`.
 - **Anything date/column related** → go through `time.js` + the `columns` memo, don't
   recompute dates inline.
 
