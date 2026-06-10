@@ -94,13 +94,13 @@ body {
   object-fit: cover; border-radius: 14px; margin-top: 12px; pointer-events: none;
 }
 /* multi-photo: a deck pinned in one spot, filling the card — only rotation
-   differs so the prints underneath peek out at the corners */
-.photo-stack { position: relative; margin-top: 12px; aspect-ratio: 4 / 3; }
+   differs so the prints underneath peek out at the corners. The extra top
+   margin clears the rotated corners so they don't poke into the text above. */
+.photo-stack { position: relative; margin-top: 24px; aspect-ratio: 4 / 3; }
 .stack-img {
   position: absolute; inset: 0; width: 100%; height: 100%;
   object-fit: cover;
   border-radius: 12px;
-  box-shadow: 0 6px 18px rgba(20,20,40,0.18);
   pointer-events: none;
 }
 /* video */
