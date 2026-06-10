@@ -101,11 +101,16 @@ function StackPhoto({ id, seed, i, top }) {
       />
     )
   }
-  const rot = seededTilt(seed, i, 7)
+  // under-photos peek out on alternating sides, slightly scaled down + tilted
+  const dir = i % 2 ? 1 : -1
+  const rot = dir * (4 + Math.abs(seededTilt(seed, i, 3)))
   return (
     <img
       className="stack-under-img"
-      style={{ transform: `rotate(${rot}deg) translate(${i * 7}px, ${i * 9}px)`, zIndex: -i }}
+      style={{
+        transform: `translate(${dir * 4}%, ${dir * -2.5}%) rotate(${rot}deg) scale(0.96)`,
+        zIndex: -i,
+      }}
       src={url}
       alt=""
       draggable={false}
@@ -127,7 +132,6 @@ function PhotoBlock({ m }) {
         <StackPhoto key={img.id} id={img.id} seed={m.id} i={i + 1} />
       ))}
       <StackPhoto id={images[0].id} seed={m.id} top />
-      <span className="stack-count">{images.length}</span>
     </div>
   )
 }
@@ -313,7 +317,13 @@ export default function MemoryCard({
           </div>
         </>
       ) : isQuote ? (
-        <div className="quote-text">{m.title || '…'}</div>
+        <div className="quote-note">
+          <span className="quote-pin quote-pin-top" style={{ background: color.text }} />
+          <span className="quote-strips" style={{ backgroundColor: color.bg, color: color.text }}>
+            {m.title || '…'}
+          </span>
+          <span className="quote-pin quote-pin-bottom" style={{ background: color.text }} />
+        </div>
       ) : (
         <>
           {m.title && <div className="card-title" style={{ color: color.text }}>{m.title}</div>}

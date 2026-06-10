@@ -65,20 +65,44 @@ function paintNote(m) {
   return { url: c.toDataURL('image/png'), width: W, height: H }
 }
 
+// quotes paint as the pinned handwritten note: colour strips behind each line
 function paintQuote(m) {
+  const color = COLORS[m.color] || COLORS.blue
   const W = 720
-  const H = 420
+  const H = 460
+  const lineH = 66
   const c = document.createElement('canvas')
   c.width = W
   c.height = H
   const ctx = c.getContext('2d')
 
-  ctx.fillStyle = '#232936'
-  ctx.font = 'italic 500 52px Newsreader, Georgia, serif'
+  ctx.font = '500 46px Caveat, cursive'
   ctx.textAlign = 'center'
-  const lines = wrapText(ctx, m.title || '…', W - 80).slice(0, 5)
-  const startY = H / 2 - ((lines.length - 1) * 64) / 2
-  lines.forEach((l, i) => ctx.fillText(l, W / 2, startY + i * 64))
+  const lines = wrapText(ctx, m.title || '…', W - 160).slice(0, 5)
+  const startY = H / 2 - ((lines.length - 1) * lineH) / 2
+  const jitterFor = (i) => ((i * 37) % 21) - 10 // ragged strip edges
+  const stripFor = (l, i) => {
+    const w = ctx.measureText(l).width
+    const j = jitterFor(i)
+    return { x: W / 2 - w / 2 - 18 + j, y: startY + i * lineH - 38, w: w + 36, h: 54, j }
+  }
+
+  lines.forEach((l, i) => {
+    const s = stripFor(l, i)
+    ctx.fillStyle = color.bg
+    ctx.fillRect(s.x, s.y, s.w, s.h)
+    ctx.fillStyle = color.text
+    ctx.fillText(l, W / 2 + s.j, startY + i * lineH)
+  })
+
+  // two pins: top-left of the first strip, bottom-right of the last
+  const first = stripFor(lines[0], 0)
+  const last = stripFor(lines[lines.length - 1], lines.length - 1)
+  ctx.fillStyle = color.text
+  ctx.beginPath()
+  ctx.arc(first.x + 4, first.y - 2, 12, 0, Math.PI * 2)
+  ctx.arc(last.x + last.w - 4, last.y + last.h + 2, 12, 0, Math.PI * 2)
+  ctx.fill()
 
   return { url: c.toDataURL('image/png'), width: W, height: H }
 }

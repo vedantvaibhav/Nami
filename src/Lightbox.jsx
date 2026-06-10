@@ -4,35 +4,51 @@ import { cardDateLabel } from './time.js'
 import { fmtTime, icons, inferType, seededBars } from './media.js'
 import { Icon, useImage } from './MemoryCard.jsx'
 
-// ---- photo: all images shown at once, fanned and tilted (Amie-style) ----
+// ---- photo: overlapping collage of prints (Amie "Meet Eric/Antoine" style) ----
+// slot layouts per image count: % positions of each print's centre + rotation
+const COLLAGE = {
+  1: [{ left: 50, top: 50, w: 72, r: -2, z: 1 }],
+  2: [
+    { left: 40, top: 44, w: 58, r: -4, z: 2 },
+    { left: 63, top: 58, w: 54, r: 3, z: 1 },
+  ],
+  3: [
+    { left: 37, top: 35, w: 54, r: -3, z: 2 },
+    { left: 66, top: 41, w: 52, r: 3, z: 1 },
+    { left: 45, top: 69, w: 50, r: -5, z: 3 },
+  ],
+  4: [
+    { left: 34, top: 33, w: 50, r: -3, z: 2 },
+    { left: 67, top: 36, w: 48, r: 4, z: 1 },
+    { left: 38, top: 69, w: 46, r: -5, z: 3 },
+    { left: 69, top: 66, w: 46, r: 6, z: 2 },
+  ],
+}
+
 function PhotoExpand({ m }) {
-  const images = m.media.filter((x) => x.kind === 'image')
-  const n = images.length
+  const images = m.media.filter((x) => x.kind === 'image').slice(0, 4)
+  const slots = COLLAGE[images.length] || COLLAGE[4]
   return (
-    <div className="lb-fan">
-      {images.map((img, i) => {
-        const mid = (n - 1) / 2
-        const rot = n === 1 ? -3 : (i - mid) * 7
-        const tx = n === 1 ? 0 : (i - mid) * 96
-        const ty = Math.abs(i - mid) * 12
-        return <FanImg key={img.id} id={img.id} i={i} rot={rot} tx={tx} ty={ty} />
-      })}
+    <div className="lb-collage">
+      {images.map((img, i) => (
+        <CollageImg key={img.id} id={img.id} i={i} slot={slots[i]} />
+      ))}
     </div>
   )
 }
 
-function FanImg({ id, i, rot, tx, ty }) {
+function CollageImg({ id, i, slot }) {
   const url = useImage(id)
   if (!url) return null
   return (
     <motion.img
-      className="lb-fan-img"
+      className="lb-collage-img"
       src={url}
       alt=""
-      style={{ zIndex: i }}
-      initial={{ opacity: 0, rotate: 0, x: 0, y: 0, scale: 0.85 }}
-      animate={{ opacity: 1, rotate: rot, x: tx, y: ty, scale: 1 }}
-      transition={{ type: 'spring', stiffness: 240, damping: 22, delay: 0.06 * i }}
+      style={{ left: `${slot.left}%`, top: `${slot.top}%`, width: `${slot.w}%`, zIndex: slot.z }}
+      initial={{ opacity: 0, scale: 0.82, rotate: 0, x: '-50%', y: '-50%' }}
+      animate={{ opacity: 1, scale: 1, rotate: slot.r, x: '-50%', y: '-50%' }}
+      transition={{ type: 'spring', stiffness: 240, damping: 22, delay: 0.05 * i }}
     />
   )
 }

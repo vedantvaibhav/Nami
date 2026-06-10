@@ -25,7 +25,7 @@ const VIEW_SWAP = {
   opacity: { duration: 0.3, ease: 'easeOut' },
 }
 
-const DAY_LIMIT = 3 // max memories per day
+const DAY_LIMIT = 2 // max memories per day
 const COL_W = 340 // fixed column width — populated dates lay out sequentially
 
 export default function App() {
@@ -45,7 +45,6 @@ export default function App() {
   const [toast, setToast] = useState(null)
   const toastTimer = useRef(null)
   const scrollRef = useRef(null)
-  const colorCursor = useRef(Math.floor(Math.random() * COLOR_KEYS.length))
 
   const zoom = ZOOMS[zoomIdx]
   const isYears = zoom.id === 'years'
@@ -272,7 +271,8 @@ export default function App() {
   const setCardDate = (id, iso) =>
     setMemories((ms) => ms.map((m) => (m.id === id ? { ...m, date: iso } : m)))
 
-  const nextColor = () => COLOR_KEYS[colorCursor.current++ % COLOR_KEYS.length]
+  // completely random pastel from the palette; fixed once assigned
+  const nextColor = () => COLOR_KEYS[Math.floor(Math.random() * COLOR_KEYS.length)]
   const todayISO = () => toISO(new Date())
 
   // how many real (non-draft) memories already sit on a date

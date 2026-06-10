@@ -69,7 +69,7 @@ A **memory** object (stored in the `memories` array, persisted as a list):
 | `src/App.jsx` | The shell. Owns `memories` state, timeline geometry (columns), zoom, scroll + the zoom-pill scrollbar, the morphing dock↔composer, toast, lightbox routing, and the Days/Months timeline vs Years orbit switch. |
 | `src/MemoryCard.jsx` | Renders one card (note/quote/photo/video/audio) + inline edit mode. Exports the shared **`Icon`** component and **`useImage`** hook. Contains `DateChip`, `DropZone`, `PhotoBlock`, `VideoBlock`, `AudioBlock`. |
 | `src/Composer.jsx` | The add form that the bottom toolbar morphs into. Title, note, big upload block, a **custom `CalendarPopover`** (portaled, anchored above the date field — we do NOT use the native date picker). |
-| `src/Lightbox.jsx` | Expand view per media type: `PhotoExpand` (all images fanned + tilted, close at bottom, no text), `VideoExpand` (big, autoplay muted, volume toggle), `AudioExpand` (waveform + centred play/pause + scrubber). |
+| `src/Lightbox.jsx` | Expand view per media type: `PhotoExpand` (overlapping collage of prints, close at bottom, no text), `VideoExpand` (big, autoplay muted, volume toggle), `AudioExpand` (waveform + centred play/pause + scrubber). |
 | `src/YearOrbit.jsx` | The Years view. Builds media items from all committed memories and renders the 3D canvas; `OrbitModal` is the click-to-open card. |
 | `src/canvas3d/` | Ported infinite 3D canvas (from **edoardolunardi/infinite-canvas**, MIT). `InfiniteMemoryCanvas.jsx` (scene + controls), `textures.js` (paints notes/quotes to canvas textures, loads photo blobs via `buildMediaItems`), `utils.js` (chunk math). |
 | `src/media.js` | Media helpers: `ACCEPT`, `MAX_SAFE_BYTES`, `kindFromMime`, `inferType`, `firstImageId`, `seededTilt`, `seededBars`, `videoThumb`, `fmtTime`, and the `icons` SVG-path map. |
@@ -111,12 +111,17 @@ tracks scroll, and you can drag it. See `syncThumb` / `thumbX` / `thumbWmv`.
 ## Key conventions / invariants
 
 - **No future dates.** New cards and the calendar clamp to today (`todayISO()`).
-- **Max `DAY_LIMIT = 3` memories per day.** Enforced at every add path (composer, drop,
+- **Max `DAY_LIMIT = 2` memories per day.** Enforced at every add path (composer, drop,
   paste) and surfaced via the `toast`.
 - **App opens in Years view** on load (`zoomIdx` starts at 2) to avoid a Days-pill flash.
-- **Colours are fixed at creation** (random from the palette), not user-changeable.
+- **Colours are fixed at creation** (truly random from the palette), not user-changeable.
+  Card title text always uses the matching `color.text` hue of its pastel `color.bg`.
 - **Icon buttons follow the `.icon-btn` pattern**: no fill at rest, fill on hover/active.
-- **Fonts**: UI is `system-ui`; quotes use `Newsreader` italic (loaded in `index.html`).
+- **Fonts**: UI is `system-ui`; **quotes are handwritten `Caveat`** rendered as a pinned
+  note — colour strips behind each line (`box-decoration-break: clone`) + two pin dots,
+  using the memory's palette colour. Same treatment painted in the orbit (`paintQuote`).
+- **Photo expand = overlapping collage** (`COLLAGE` slot layouts in `Lightbox.jsx`,
+  up to 4 prints, % positions + rotations), not a side-by-side strip.
 - **Tilts/waveforms are seeded by id** (`seededTilt`, `seededBars`) so they're stable
   across reloads.
 - **The bottom dock morphs** between the toolbar and the composer via measured
