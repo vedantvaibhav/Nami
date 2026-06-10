@@ -41,6 +41,13 @@ export default function App() {
   const colorCursor = useRef(Math.floor(Math.random() * COLOR_KEYS.length))
 
   const zoom = ZOOMS[zoomIdx]
+  const isYears = zoom.id === 'years'
+  // ref mirror for stable callbacks (syncThumb) — both views stay mounted now,
+  // so "is the orbit active" can't be inferred from scrollRef being null anymore.
+  // useLayoutEffect (declared before the zoom-restore effect below) so it's
+  // fresh before any same-pass layout work reads it.
+  const zoomIdRef = useRef(zoom.id)
+  useLayoutEffect(() => { zoomIdRef.current = zoom.id }, [zoom.id])
 
   // ---- load / persist -------------------------------------------------
   useEffect(() => {
@@ -127,8 +134,9 @@ export default function App() {
   const morphAnim = useRef(null)
 
   const syncThumb = useCallback((smooth = false) => {
-    const el = scrollRef.current
-    // no scroller (orbit view) -> pill fills the whole track
+    // in the orbit (Years) view the pill fills the whole track — the scroller
+    // is still mounted (hidden layer), so gate on the zoom, not on the ref
+    const el = zoomIdRef.current === 'years' ? null : scrollRef.current
     const frac = el ? el.clientWidth / el.scrollWidth : 1
     const w = Math.max(64, Math.min(TRACK_W, Math.round(TRACK_W * frac)))
     thumbWTarget.current = w
@@ -363,7 +371,7 @@ export default function App() {
 
   const onDrop = async (e) => {
     e.preventDefault()
-    if (!scrollRef.current) return // orbit view: no drop target
+    if (zoom.id === 'years') return // orbit view: no drop target
     const files = [...(e.dataTransfer?.files || [])]
     if (!files.length) return
     if (editingIdRef.current) return attachFiles(editingIdRef.current, files)
@@ -397,9 +405,19 @@ export default function App() {
 
   return (
     <div className="viewport" onDragOver={(e) => e.preventDefault()} onDrop={onDrop}>
-      {zoom.id === 'years' ? (
-        <YearOrbit memories={memories} year={new Date().getFullYear()} />
-      ) : (
+      {/* Both views stay mounted and cross-fade — remounting the 3D canvas on
+          every Months↔Years switch (WebGL context + shaders + textures) was
+          the source of the switch lag. Hidden layer is visibility:hidden and
+          the orbit's frameloop pauses, so it costs nothing while inactive. */}
+      <motion.div
+        className="view-layer"
+        initial={false}
+        animate={isYears
+          ? { opacity: 0, scale: 0.985, transitionEnd: { visibility: 'hidden' } }
+          : { opacity: 1, scale: 1, visibility: 'visible' }}
+        transition={{ duration: 0.3, ease: 'easeOut' }}
+        style={{ pointerEvents: isYears ? 'none' : 'auto' }}
+      >
       <div className="scroller" ref={scrollRef}>
         <div className="canvas" style={{ width: widthPx }} onClick={onCanvasClick}>
           <div className="topline" />
@@ -443,7 +461,19 @@ export default function App() {
           ))}
         </div>
       </div>
-      )}
+      </motion.div>
+
+      <motion.div
+        className="view-layer"
+        initial={false}
+        animate={isYears
+          ? { opacity: 1, scale: 1, visibility: 'visible' }
+          : { opacity: 0, scale: 1.015, transitionEnd: { visibility: 'hidden' } }}
+        transition={{ duration: 0.3, ease: 'easeOut' }}
+        style={{ pointerEvents: isYears ? 'auto' : 'none' }}
+      >
+        <YearOrbit memories={memories} active={isYears} />
+      </motion.div>
 
       <div className="dock-wrap">
         <motion.div

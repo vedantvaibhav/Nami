@@ -90,7 +90,18 @@ In `App.jsx`, the `columns` memo turns `memories` into positioned columns:
   real time, Amie-style). `widthPx = columns.length * COL_W`.
 - Each column is an absolutely-positioned flex stack; cards stack **top-aligned**, even
   gap, no overlap. New cards append below.
-- **Years view** bypasses all this and renders `<YearOrbit/>`.
+- **Years view** renders `<YearOrbit/>` instead of the column timeline.
+
+**Both views are ALWAYS mounted** as stacked `.view-layer`s in `App.jsx` and cross-fade
+on zoom change (0.3s, slight scale). This is deliberate: remounting the 3D canvas on
+every Months↔Years switch (WebGL context + shader compile + texture builds) caused
+visible lag. The hidden layer gets `visibility: hidden` + `pointer-events: none`, and
+the orbit's R3F `frameloop` flips to `'never'` (via the `active` prop chain
+`App → YearOrbit → InfiniteMemoryCanvas`) so it costs nothing while inactive.
+Consequences to respect:
+- `scrollRef` is **never null** anymore — gate orbit-vs-timeline logic on the zoom
+  (see `zoomIdRef` used by `syncThumb`, and the `zoom.id === 'years'` check in `onDrop`).
+- Don't conditionally unmount either view; toggle via the layer animation.
 
 The **zoom pill is the scrollbar**: its width = `viewport/scrollWidth`, its position
 tracks scroll, and you can drag it. See `syncThumb` / `thumbX` / `thumbWmv`.

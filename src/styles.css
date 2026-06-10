@@ -13,6 +13,9 @@ body {
 
 .viewport { position: relative; height: 100vh; }
 
+/* stacked view layers (2D timeline + 3D orbit) cross-faded on zoom change */
+.view-layer { position: absolute; inset: 0; }
+
 .scroller {
   height: 100%; overflow-x: auto; overflow-y: hidden;
   overflow-anchor: none;

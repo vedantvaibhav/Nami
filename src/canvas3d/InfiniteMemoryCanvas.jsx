@@ -338,7 +338,7 @@ function SceneController({ media, onOpen }) {
   ))
 }
 
-export default function InfiniteMemoryCanvas({ media, onOpen }) {
+export default function InfiniteMemoryCanvas({ media, active = true, onOpen }) {
   const dpr = Math.min(window.devicePixelRatio || 1, 1.5)
   if (!media.length) return null
 
@@ -348,6 +348,7 @@ export default function InfiniteMemoryCanvas({ media, onOpen }) {
         camera={{ position: [0, 0, INITIAL_CAMERA_Z], fov: 60, near: 1, far: 500 }}
         dpr={dpr}
         flat
+        frameloop={active ? 'always' : 'never'} // pause render loop while the layer is hidden
         gl={{ antialias: false, powerPreference: 'high-performance' }}
       >
         <color attach="background" args={['#FDFDFC']} />

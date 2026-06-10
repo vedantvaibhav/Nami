@@ -48,7 +48,7 @@ function OrbitModal({ m, onClose }) {
   )
 }
 
-export default function YearOrbit({ memories, year }) {
+export default function YearOrbit({ memories, active = true }) {
   const [media, setMedia] = useState(null)
   const [open, setOpen] = useState(null)
 
@@ -62,7 +62,7 @@ export default function YearOrbit({ memories, year }) {
 
   return (
     <div className="orbit-view">
-      {media && <InfiniteMemoryCanvas media={media} onOpen={setOpen} />}
+      {media && <InfiniteMemoryCanvas media={media} active={active} onOpen={setOpen} />}
 
       <AnimatePresence>
         {open && <OrbitModal m={open} onClose={() => setOpen(null)} />}
