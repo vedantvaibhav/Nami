@@ -18,12 +18,16 @@ const SHELL_CLOSE = { type: 'spring', stiffness: 190, damping: 32, mass: 1.05 } 
 // A card is worth keeping if it has a title, body, or any media
 const isEmpty = (m) => !m.title?.trim() && !m.body?.trim() && !(m.media?.length)
 
-// view cross-fade: bouncy spring on scale, clean tween on opacity
-// (a spring on opacity would overshoot past 1 and flicker)
+// swift "dissolve" easing — races to ~80% then a soft settle (easeOutExpo-ish)
+const SWIFT = [0.16, 1, 0.3, 1]
+// view cross-fade: opacity dissolves quickly, position/scale settles a touch
+// slower on the same swift curve — reads as a smooth, fast dissolve (no bounce)
 const VIEW_SWAP = {
-  scale: { type: 'spring', stiffness: 300, damping: 16, mass: 0.9 },
+  scale: { duration: 0.5, ease: SWIFT },
   opacity: { duration: 0.3, ease: 'easeOut' },
 }
+// one-time entrance for the whole stack on first load
+const APP_ENTER = { duration: 0.6, ease: SWIFT }
 
 const DAY_LIMIT = 2 // max memories per day
 const COL_W = 340 // fixed column width — populated dates lay out sequentially
@@ -382,9 +386,15 @@ export default function App() {
       {/* hidden layers stay opacity-0 but PAINTED — flipping visibility forced a
           full timeline repaint in the same frame the pill morph starts (hitch) */}
       <motion.div
+        className="view-stack"
+        initial={{ opacity: 0, scale: 1.015 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={APP_ENTER}
+      >
+      <motion.div
         className={`view-layer ${isYears ? 'view-layer-off' : ''}`}
         initial={false}
-        animate={isYears ? { opacity: 0, scale: 0.97 } : { opacity: 1, scale: 1 }}
+        animate={isYears ? { opacity: 0, scale: 0.985 } : { opacity: 1, scale: 1 }}
         transition={VIEW_SWAP}
       >
       <div className="scroller" ref={scrollRef}>
@@ -429,10 +439,11 @@ export default function App() {
       <motion.div
         className={`view-layer ${isYears ? '' : 'view-layer-off'}`}
         initial={false}
-        animate={isYears ? { opacity: 1, scale: 1 } : { opacity: 0, scale: 1.03 }}
+        animate={isYears ? { opacity: 1, scale: 1 } : { opacity: 0, scale: 1.04 }}
         transition={VIEW_SWAP}
       >
         <YearOrbit memories={memories} active={isYears} />
+      </motion.div>
       </motion.div>
 
       <div className="dock-wrap">
@@ -484,10 +495,10 @@ export default function App() {
                 <AnimatePresence mode="popLayout" initial={false}>
                   <motion.span
                     key={zoom.id}
-                    initial={{ opacity: 0, y: 6, filter: 'blur(3px)' }}
+                    initial={{ opacity: 0, y: 7, filter: 'blur(4px)' }}
                     animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
-                    exit={{ opacity: 0, y: -6, filter: 'blur(3px)' }}
-                    transition={{ duration: 0.45, ease: [0.45, 0, 0.15, 1] }}
+                    exit={{ opacity: 0, y: -7, filter: 'blur(4px)' }}
+                    transition={{ duration: 0.32, ease: SWIFT }}
                   >
                     {zoom.id === 'years' ? `${zoom.label} (${new Date().getFullYear()})` : zoom.label}
                   </motion.span>

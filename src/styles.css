@@ -13,6 +13,9 @@ body {
 
 .viewport { position: relative; height: 100vh; }
 
+/* one-time entrance wrapper — dissolves the whole stack in on first load */
+.view-stack { position: absolute; inset: 0; will-change: transform, opacity; }
+
 /* stacked view layers (2D timeline + 3D orbit) cross-faded on zoom change.
    Promote each to its own compositor layer so the opacity+scale crossfade is
    pure GPU work and never re-rasterises the timeline mid-switch (the cause of
