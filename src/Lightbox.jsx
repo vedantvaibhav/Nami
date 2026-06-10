@@ -142,7 +142,7 @@ export default function Lightbox({ m, onClose }) {
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
 
-  // photos show just the images + a close button at the bottom (no text)
+  // photos show just the images — click anywhere outside them (or Escape) to close
   if (type === 'photo') {
     return (
       <motion.div
@@ -155,9 +155,6 @@ export default function Lightbox({ m, onClose }) {
       >
         <div className="lb-photo-wrap" onClick={(e) => e.stopPropagation()}>
           <PhotoExpand m={m} />
-          <button className="lb-close-bottom" onClick={onClose} title="Close">
-            <Icon d={icons.close} size={20} />
-          </button>
         </div>
       </motion.div>
     )
