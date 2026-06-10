@@ -38,9 +38,18 @@ export default function App() {
   const [openId, setOpenId] = useState(null) // lightbox
   const [composerOpen, setComposerOpen] = useState(false)
   const [composerKey, setComposerKey] = useState(0) // remount composer fresh on each open
+  const [entered, setEntered] = useState(false) // true after the load entrance — gates the card fade-in so toggles don't re-flicker
   const toolbarRef = useRef(null)
   const composerRef = useRef(null)
   const sizeMorph = useRef(false) // animate the shell size only during a composer open/close
+
+  // flip `entered` once, shortly after the first load, so cards fade in on the
+  // initial entrance but NOT on later re-mounts (e.g. Days<->Months toggles)
+  useEffect(() => {
+    if (!memories || entered) return
+    const t = setTimeout(() => setEntered(true), 750)
+    return () => clearTimeout(t)
+  }, [memories, entered])
   const [dockDims, setDockDims] = useState({ toolbarW: 462, composerH: 450 })
   const [toast, setToast] = useState(null)
   const toastTimer = useRef(null)
@@ -428,6 +437,7 @@ export default function App() {
                       key={m.id}
                       m={m}
                       index={idx}
+                      entered={entered}
                       onDelete={removeMemory}
                       onOpen={setOpenId}
                     />

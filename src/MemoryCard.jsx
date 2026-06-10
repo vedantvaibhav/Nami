@@ -115,7 +115,7 @@ export function AudioBlock({ m, tall = false }) {
 
 // ---- the card --------------------------------------------------------------
 export default function MemoryCard({
-  m, index = 0,
+  m, index = 0, entered = false,
   onDelete, onOpen,
 }) {
   const type = inferType(m)
@@ -139,7 +139,9 @@ export default function MemoryCard({
       layout="position"
       className={`card ${isQuote ? 'card-quote' : ''}`}
       style={isQuote ? { marginTop: scatter } : { marginTop: scatter, background: color.bg }}
-      initial={{ opacity: 0 }}
+      // fade in only on the first load; on toggle re-mounts start visible so the
+      // card just glides (no opacity flicker)
+      initial={entered ? false : { opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0, transition: { duration: 0.16, ease: 'easeOut' } }}
       transition={{
