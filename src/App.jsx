@@ -463,7 +463,7 @@ export default function App() {
       <div className="dock-wrap">
         <motion.div
           className={`dock-shell ${composerOpen ? 'dock-shell-open' : ''}`}
-          initial={{ y: 64, opacity: 0 }}
+          initial={{ y: 72, opacity: 0 }}
           animate={{
             y: 0,
             opacity: 1,
@@ -472,10 +472,11 @@ export default function App() {
           }}
           style={{ borderRadius: 24 }}
           transition={{
-            // entrance: rises up from below the screen, slightly trailing the
-            // content so the two converge
-            y: { duration: 0.6, ease: SWIFT, delay: 0.08 },
-            opacity: { duration: 0.5, ease: 'easeOut', delay: 0.08 },
+            // entrance: the bar waits for the content to load + the toolbar to
+            // self-measure (so it appears at its final width, no snap), then
+            // rises up slowly from below — y and opacity share one timing
+            y: { duration: 0.7, ease: SWIFT, delay: 0.55 },
+            opacity: { duration: 0.55, ease: 'easeOut', delay: 0.55 },
             // size only animates during an actual open/close morph; on load /
             // self-measurement it snaps instantly so the bar just appears
             width: sizeMorph.current ? (composerOpen ? SHELL_OPEN : SHELL_CLOSE) : { duration: 0 },
