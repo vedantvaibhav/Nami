@@ -130,7 +130,9 @@ export default function MemoryCard({
 
   return (
     <motion.div
-      layout
+      // shared id so the card glides from its Days slot to its Months slot
+      // (and back) when the timeline re-lays-out on toggle
+      layoutId={m.id}
       className={`card ${isQuote ? 'card-quote' : ''}`}
       style={isQuote ? { marginTop: scatter } : { marginTop: scatter, background: color.bg }}
       initial={{ opacity: 0, y: 12, scale: 0.97 }}
@@ -140,7 +142,8 @@ export default function MemoryCard({
         duration: 0.42,
         ease: [0.16, 1, 0.3, 1],
         delay: Math.min(index, 6) * 0.04, // gentle cascade down the column
-        layout: { duration: 0.32, ease: [0.16, 1, 0.3, 1] },
+        // the toggle "flight" — slow, smooth glide with a hint of life
+        layout: { type: 'spring', stiffness: 85, damping: 19, mass: 1 },
       }}
       whileHover={{ scale: 0.98 }}
       onClick={(e) => {

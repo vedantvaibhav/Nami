@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { AnimatePresence, animate, motion, useMotionValue } from 'framer-motion'
+import { AnimatePresence, LayoutGroup, animate, motion, useMotionValue } from 'framer-motion'
 import MemoryCard from './MemoryCard.jsx'
 import YearOrbit from './YearOrbit.jsx'
 import Lightbox from './Lightbox.jsx'
@@ -387,8 +387,8 @@ export default function App() {
           full timeline repaint in the same frame the pill morph starts (hitch) */}
       <motion.div
         className="view-stack"
-        initial={{ opacity: 0, scale: 1.015 }}
-        animate={{ opacity: 1, scale: 1 }}
+        initial={{ opacity: 0, y: -26 }}
+        animate={{ opacity: 1, y: 0 }}
         transition={APP_ENTER}
       >
       <motion.div
@@ -413,25 +413,29 @@ export default function App() {
             )
           })}
 
-          {columns.map(({ key, colX, items }) => (
-            <div
-              key={key}
-              className="column"
-              style={{ left: colX + 8, top: MARKER_H + 20, width: COL_W - 16 }}
-            >
-              <AnimatePresence>
-                {items.map((m, idx) => (
-                  <MemoryCard
-                    key={m.id}
-                    m={m}
-                    index={idx}
-                    onDelete={removeMemory}
-                    onOpen={setOpenId}
-                  />
-                ))}
-              </AnimatePresence>
-            </div>
-          ))}
+          {/* one layout group so a card glides from its Days position to its
+              Months position (and back) — shared-layout flight on toggle */}
+          <LayoutGroup>
+            {columns.map(({ key, colX, items }) => (
+              <div
+                key={key}
+                className="column"
+                style={{ left: colX + 8, top: MARKER_H + 20, width: COL_W - 16 }}
+              >
+                <AnimatePresence>
+                  {items.map((m, idx) => (
+                    <MemoryCard
+                      key={m.id}
+                      m={m}
+                      index={idx}
+                      onDelete={removeMemory}
+                      onOpen={setOpenId}
+                    />
+                  ))}
+                </AnimatePresence>
+              </div>
+            ))}
+          </LayoutGroup>
         </div>
       </div>
       </motion.div>
@@ -449,7 +453,7 @@ export default function App() {
       <div className="dock-wrap">
         <motion.div
           className={`dock-shell ${composerOpen ? 'dock-shell-open' : ''}`}
-          initial={{ y: 20, opacity: 0 }}
+          initial={{ y: 64, opacity: 0 }}
           animate={{
             y: 0,
             opacity: 1,
@@ -458,8 +462,10 @@ export default function App() {
           }}
           style={{ borderRadius: 24 }}
           transition={{
-            y: { duration: 0.3, ease: 'easeOut' },
-            opacity: { duration: 0.3, ease: 'easeOut' },
+            // entrance: rises up from below the screen, slightly trailing the
+            // content so the two converge
+            y: { duration: 0.6, ease: SWIFT, delay: 0.08 },
+            opacity: { duration: 0.5, ease: 'easeOut', delay: 0.08 },
             // size only animates during an actual open/close morph; on load /
             // self-measurement it snaps instantly so the bar just appears
             width: sizeMorph.current ? (composerOpen ? SHELL_OPEN : SHELL_CLOSE) : { duration: 0 },
