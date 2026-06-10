@@ -85,13 +85,13 @@ body {
   display: block; width: 100%; height: auto; max-height: 220px;
   object-fit: cover; border-radius: 14px; margin-top: 12px; pointer-events: none;
 }
-/* multi-photo: a row of overlapping tilted polaroids */
-.photo-cluster { position: relative; margin-top: 14px; }
-.cluster-img {
+/* multi-photo: a deck of prints — first on top, each next peeking out below, tilted */
+.photo-stack { position: relative; margin-top: 14px; }
+.stack-img {
   position: absolute;
-  aspect-ratio: 1 / 1; object-fit: cover;
-  border: 5px solid #fff; border-radius: 8px;
-  box-shadow: 0 4px 14px rgba(20,20,40,0.16);
+  object-fit: cover;
+  border: 6px solid #fff; border-radius: 10px;
+  box-shadow: 0 6px 18px rgba(20,20,40,0.18);
   pointer-events: none;
 }
 /* video */

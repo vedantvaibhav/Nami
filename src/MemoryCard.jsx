@@ -31,17 +31,17 @@ export const Icon = ({ d, size = 16, stroke = 1.8, className = '' }) => (
 )
 
 // ---- media renderers -------------------------------------------------------
-function ClusterImg({ id, style }) {
+function StackImg({ id, style }) {
   const url = useImage(id)
   if (!url) return null
-  return <img className="cluster-img" style={style} src={url} alt="" draggable={false} />
+  return <img className="stack-img" style={style} src={url} alt="" draggable={false} />
 }
 
-// multiple photos lay side by side as overlapping tilted polaroids (reference look)
-const CLUSTER = {
-  2: { w: 58, lefts: [0, 42], z: [1, 2], h: 200 },
-  3: { w: 46, lefts: [0, 27, 54], z: [1, 3, 2], h: 165 },
-}
+// multiple photos = a deck: the first print sits on top, each next one peeks out
+// below it, slightly tilted, like a hand-dropped stack (see reference)
+const PRINT_W = 248
+const PRINT_H = 188 // ~4:3 print
+const PEEK = 22     // how far each lower print drops below the one above
 
 function PhotoBlock({ m }) {
   const images = m.media.filter((x) => x.kind === 'image').slice(0, 3)
@@ -50,22 +50,24 @@ function PhotoBlock({ m }) {
   if (images.length === 1) {
     return <img className="card-photo" src={topUrl} alt={m.title || 'memory'} draggable={false} />
   }
-  const lay = CLUSTER[images.length] || CLUSTER[3]
+  const n = images.length
   return (
-    <div className="photo-cluster" style={{ height: lay.h }}>
+    <div className="photo-stack" style={{ height: PRINT_H + (n - 1) * PEEK + 8 }}>
       {images.map((img, i) => {
-        const rot = seededTilt(m.id, i, 4)
-        const jig = i % 2 ? 10 : 0
+        // front print barely tilted; each one behind it leans a little more, alternating
+        const rot = i === 0 ? seededTilt(m.id, i, 1.5) : seededTilt(m.id, i, 3) + (i % 2 ? 2.5 : -2.5)
+        const jig = i === 0 ? 0 : seededTilt(m.id, i + 9, 7)
         return (
-          <ClusterImg
+          <StackImg
             key={img.id}
             id={img.id}
             style={{
-              left: `${lay.lefts[i]}%`,
-              width: `${lay.w}%`,
-              top: jig,
-              zIndex: lay.z[i],
-              transform: `rotate(${rot}deg)`,
+              width: PRINT_W,
+              height: PRINT_H,
+              left: `calc(50% + ${jig}px)`,
+              top: i * PEEK,
+              zIndex: n - i, // first image on top, rest stacked behind
+              transform: `translateX(-50%) rotate(${rot}deg)`,
             }}
           />
         )
