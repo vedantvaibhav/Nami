@@ -304,11 +304,15 @@ body {
 }
 .lb-collage {
   position: relative;
-  width: min(1040px, 94vw); height: 72vh;
+  width: min(1000px, 92vw); aspect-ratio: 3 / 2;
+  max-height: 78vh;
 }
+/* every print is the SAME 4:3 box (cover-cropped) so spacing is predictable
+   regardless of the image's own aspect — otherwise tall/square images blow
+   past their row and overlap massively */
 .lb-collage-img {
   position: absolute;
-  max-height: 64vh; object-fit: cover;
+  aspect-ratio: 4 / 3; object-fit: cover;
   border-radius: 16px;
   box-shadow: 0 18px 50px rgba(0,0,0,0.35);
 }
