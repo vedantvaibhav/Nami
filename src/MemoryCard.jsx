@@ -174,6 +174,9 @@ const MemoryCard = forwardRef(function MemoryCard({
       animate={{ opacity: 1 }}
       exit={{ opacity: 0, transition: { duration: 0.16, ease: 'easeOut' } }}
       transition={{
+        // gesture transforms (whileHover / whileDrag scale, shadow) settle on a
+        // quick tween — NO spring, so releasing a drag doesn't bounce the card
+        default: { type: 'tween', duration: 0.14, ease: 'easeOut' },
         opacity: { duration: 0.34, ease: [0.16, 1, 0.3, 1], delay: Math.min(index, 6) * 0.04 },
         // the toggle glide — smooth, a touch faster than before
         layout: { type: 'spring', stiffness: 120, damping: 22, mass: 1 },

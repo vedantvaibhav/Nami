@@ -37,9 +37,9 @@ const COL_TOP = MARKER_H + 20      // column's top offset inside the canvas (mat
 const DOCK_CLEARANCE = 96          // bottom margin that clears the floating dock
 const SNAP_THRESHOLD = 12          // gentle magnetic snap distance (px)
 const MIN_GAP = 14                 // minimum gap kept between two cards (matches the auto flex gap)
-// settle for a card committing to its snapped/clamped Y on drop — a clean,
-// quick glide with NO bounce
-const CARD_SETTLE = { type: 'tween', duration: 0.2, ease: [0.22, 1, 0.36, 1] }
+// settle for a card committing to its snapped/clamped Y on drop — a fast,
+// decisive "click into place". Overdamped spring => quick + zero overshoot.
+const CARD_SETTLE = { type: 'spring', stiffness: 700, damping: 60, mass: 1 }
 
 // a soft, subtle "tock" synthesised on drop (no asset needed)
 let _audioCtx = null
