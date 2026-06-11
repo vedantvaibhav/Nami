@@ -138,8 +138,17 @@ export default function App() {
     }
   }, [memories])
 
+  // ---- viewport width (mobile responsiveness) ---------------------------
+  const [vw, setVw] = useState(typeof window !== 'undefined' ? window.innerWidth : 1280)
+  useEffect(() => {
+    const onResize = () => setVw(window.innerWidth)
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [])
+
   // ---- scrollbar thumb (the zoom pill IS the scrollbar) -----------------
-  const TRACK_W = 280
+  // pill track shrinks on small screens so the whole toolbar fits the width
+  const TRACK_W = Math.min(280, Math.max(150, vw - 200))
   const thumbX = useMotionValue(0)
   const thumbWmv = useMotionValue(TRACK_W)
   const thumbWTarget = useRef(TRACK_W)
@@ -467,7 +476,7 @@ export default function App() {
           animate={{
             y: 0,
             opacity: 1,
-            width: composerOpen ? 440 : dockDims.toolbarW,
+            width: composerOpen ? Math.min(440, vw - 24) : dockDims.toolbarW,
             height: composerOpen ? dockDims.composerH : 48,
           }}
           style={{ borderRadius: 24 }}

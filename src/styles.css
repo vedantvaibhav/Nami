@@ -283,7 +283,7 @@ body {
 }
 .lb-close:hover { background: #fff; color: #16181D; }
 .lb-main { display: grid; place-items: center; }
-.lb-main img, .lb-main video { max-width: 800px; max-height: 70vh; border-radius: 16px; display: block; }
+.lb-main img, .lb-main video { max-width: min(800px, 92vw); max-height: 70vh; border-radius: 16px; display: block; }
 .lb-video { position: relative; }
 .lb-volume {
   position: absolute; bottom: 14px; right: 14px;
@@ -435,7 +435,7 @@ body {
 .orbit-stage-quote {
   font-family: 'Newsreader', Georgia, serif; font-style: italic;
   font-size: 34px; line-height: 1.35; color: #232936; text-align: center;
-  max-width: 480px;
+  max-width: min(480px, 86vw);
 }
 .orbit-close {
   width: 40px; height: 40px; border: none; border-radius: 50%;
@@ -443,3 +443,15 @@ body {
   box-shadow: 0 3px 12px rgba(20,20,40,0.10), 0 1px 2px rgba(20,20,40,0.06);
 }
 .orbit-close:hover { color: #16181D; transform: scale(1.06); }
+
+/* ---- mobile ---- */
+@media (max-width: 640px) {
+  .lb-backdrop { padding: 16px; }
+  .dock-wrap { bottom: 16px; padding: 0 10px; }
+  .marker-day { font-size: 14px; }
+  .marker-year { font-size: 11px; }
+  .orbit-stage-quote { font-size: 26px; }
+  .orbit-stage-card { padding: 18px 18px 16px; }
+  /* big upload block + composer breathe a little less on small screens */
+  .composer { padding: 14px; gap: 12px; }
+}

@@ -106,11 +106,34 @@ const imgDimensions = (url) =>
     img.src = url
   })
 
+// draw the photo into a rounded-rect clip so the orbit plane shows rounded
+// corners (like the painted note/quote cards), capped so the texture stays sane
+const roundedPhoto = (url, w, h) =>
+  new Promise((resolve) => {
+    const img = new Image()
+    img.onload = () => {
+      const scale = Math.min(1, 1024 / Math.max(w, h))
+      const cw = Math.max(1, Math.round(w * scale))
+      const ch = Math.max(1, Math.round(h * scale))
+      const c = document.createElement('canvas')
+      c.width = cw
+      c.height = ch
+      const ctx = c.getContext('2d')
+      roundRect(ctx, 0, 0, cw, ch, Math.round(Math.min(cw, ch) * 0.07))
+      ctx.clip()
+      ctx.drawImage(img, 0, 0, cw, ch)
+      resolve(c.toDataURL('image/png'))
+    }
+    img.onerror = () => resolve(url)
+    img.src = url
+  })
+
 async function photoItem(m) {
   const url = await imageURL(firstImageId(m))
   if (!url) return null
   const dims = await imgDimensions(url)
-  return { url, ...dims }
+  const rounded = await roundedPhoto(url, dims.width, dims.height)
+  return { url: rounded, ...dims }
 }
 
 export async function buildMediaItems(memories) {
