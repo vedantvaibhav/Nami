@@ -29,15 +29,15 @@ const VIEW_SWAP = {
 // one-time entrance for the whole stack on first load
 const APP_ENTER = { duration: 0.6, ease: SWIFT }
 
-const DAY_LIMIT = 2 // max memories per day
 const COL_W = 340 // fixed column width — populated dates lay out sequentially
 
 // ---- manual vertical placement (drag-to-reposition) ----
 const COL_TOP = MARKER_H + 20      // column's top offset inside the canvas (matches .column top)
 const DOCK_CLEARANCE = 96          // bottom margin that clears the floating dock
 const SNAP_THRESHOLD = 12          // gentle magnetic snap distance (px)
-// settle spring for a card committing to its snapped/clamped Y on drop
-const CARD_SETTLE = { type: 'spring', stiffness: 340, damping: 30, mass: 1 }
+// settle for a card committing to its snapped/clamped Y on drop — a clean,
+// quick glide with NO bounce
+const CARD_SETTLE = { type: 'tween', duration: 0.2, ease: [0.22, 1, 0.36, 1] }
 
 export default function App() {
   const [memories, setMemories] = useState(null)
@@ -58,8 +58,6 @@ export default function App() {
     return () => clearTimeout(t)
   }, [memories, entered])
   const [dockDims, setDockDims] = useState({ toolbarW: 462, composerH: 450 })
-  const [toast, setToast] = useState(null)
-  const toastTimer = useRef(null)
   const scrollRef = useRef(null)
 
   // ---- manual placement (vertical drag) --------------------------------
@@ -336,24 +334,30 @@ export default function App() {
     )
   }, [view])
 
-  // Commit a drag: free vertical placement with a GENTLE magnetic snap to the
-  // column top (0) or a neighbour card's top/bottom edge, then clamp on-screen.
-  // The transient yMV holds framer's raw offset at drop; we move that offset into
-  // pos[view] (the committed top) and spring yMV → 0 so the card settles with a
-  // soft, magnetic spring rather than snapping abruptly.
+  // Commit a drag: free vertical placement with a GENTLE magnetic snap so the
+  // card abuts a neighbour (sits just above/below it, never aligned-on-top),
+  // clamped on-screen, then a final no-overlap resolve so cards can NEVER cover
+  // each other. yMV holds framer's raw offset at drop; we move it into pos[view]
+  // and glide yMV → 0 (clean, no bounce).
   const commitDrag = useCallback((id, info, items) => {
     const base = memories.find((m) => m.id === id)?.pos?.[view] ?? 0
     const raw = base + info.offset.y // where the card actually is at drop
+    const h = cardHeight(id)
+    const maxTop = Math.max(0, visibleHeight - h)
 
-    // gentle snap: candidate anchors = column top + each neighbour's top/bottom
-    const anchors = [0]
+    // other cards' occupied [top, bottom] bands for this column/view
+    const bands = []
     for (const it of items) {
       if (it.id === id) continue
       const top = it.pos?.[view]
       if (top == null) continue
-      anchors.push(top)
-      anchors.push(top + cardHeight(it.id))
+      bands.push({ top, bottom: top + cardHeight(it.id) })
     }
+
+    // gentle snap anchors: the column top, and ABUTTING each neighbour — just
+    // below it (top = band.bottom) or just above it (top = band.top - h)
+    const anchors = [0]
+    for (const b of bands) { anchors.push(b.bottom); anchors.push(b.top - h) }
     let y = raw
     let best = null
     for (const a of anchors) {
@@ -361,10 +365,19 @@ export default function App() {
       if (d <= SNAP_THRESHOLD && (best == null || d < best.d)) best = { a, d }
     }
     if (best) y = best.a
-    y = clampY(id, y) // never off-screen / under the dock
+    y = Math.min(Math.max(0, y), maxTop) // never off-screen / under the dock
 
-    // keep the card visually where it was dropped (top=target + offset), then
-    // spring the offset to 0 → soft magnetic settle onto the snapped/clamped top
+    // no overlap: if [y, y+h] still intersects a neighbour, move to the nearest
+    // gap that fits (just below / just above a band, the top line, or the max)
+    const fits = (p) => p >= 0 && p <= maxTop && !bands.some((b) => p < b.bottom && p + h > b.top)
+    if (!fits(y)) {
+      const cands = [0, maxTop]
+      for (const b of bands) { cands.push(b.bottom); cands.push(b.top - h) }
+      const ok = cands.filter(fits).sort((a, b) => Math.abs(a - y) - Math.abs(b - y))
+      if (ok.length) y = ok[0]
+    }
+
+    // keep the card visually where it was dropped, then glide the offset to 0
     const mv = cardYMV(id)
     mv.set(raw - y)
     animate(mv, 0, CARD_SETTLE)
@@ -376,13 +389,6 @@ export default function App() {
   const nextColor = () => COLOR_KEYS[Math.floor(Math.random() * COLOR_KEYS.length)]
   const todayISO = () => toISO(new Date())
 
-  // how many memories already sit on a date
-  const countOn = (iso) => memories.filter((m) => m.date === iso).length
-  const showToast = (msg) => {
-    setToast(msg)
-    clearTimeout(toastTimer.current)
-    toastTimer.current = setTimeout(() => setToast(null), 2400)
-  }
 
   // New cards default to today; the composer's date picker lets the user change it.
   const anchorDate = () => todayISO()
@@ -400,7 +406,6 @@ export default function App() {
   // commit a finished memory from the morphing composer form.
   // name only -> quote; name + note -> coloured card; media -> photo/video/audio
   const addFromComposer = ({ title, body, date, media }) => {
-    if (countOn(date) >= DAY_LIMIT) { showToast(`Only ${DAY_LIMIT} memories per day`); return }
     const hasMedia = media && media.length
     const isQuote = !hasMedia && title && !body
     const card = {
@@ -481,7 +486,6 @@ export default function App() {
     if (zoom.id === 'years') return // orbit view: no drop target
     const files = [...(e.dataTransfer?.files || [])]
     if (!files.length) return
-    if (countOn(anchorDate()) >= DAY_LIMIT) { showToast(`Only ${DAY_LIMIT} memories per day`); return }
     const card = blankCard(anchorDate())
     setMemories((ms) => [...ms, card])
     attachFiles(card.id, files)
@@ -491,7 +495,6 @@ export default function App() {
     const onPaste = async (e) => {
       const item = [...(e.clipboardData?.items || [])].find((i) => i.type.startsWith('image/'))
       if (!item) return
-      if (countOn(anchorDate()) >= DAY_LIMIT) { showToast(`Only ${DAY_LIMIT} memories per day`); return }
       const card = blankCard(anchorDate())
       setMemories((ms) => [...ms, card])
       attachFiles(card.id, [item.getAsFile()])
@@ -700,20 +703,6 @@ export default function App() {
           </motion.div>
         </motion.div>
       </div>
-
-      <AnimatePresence>
-        {toast && (
-          <motion.div
-            className="toast"
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 8 }}
-            transition={{ duration: 0.2, ease: 'easeOut' }}
-          >
-            {toast}
-          </motion.div>
-        )}
-      </AnimatePresence>
 
       <AnimatePresence>
         {openCard && <Lightbox key={openCard.id} m={openCard} onClose={() => setOpenId(null)} />}

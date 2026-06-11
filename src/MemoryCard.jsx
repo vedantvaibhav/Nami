@@ -131,6 +131,9 @@ const MemoryCard = forwardRef(function MemoryCard({
   const type = inferType(m)
   const color = COLORS[m.color] || COLORS.blue
   const isQuote = type === 'quote'
+  // distinguishes a drag from a click: set on drag start, reset on each fresh
+  // pointer-down, consumed by onClick so a drag never opens the lightbox
+  const draggedRef = useRef(false)
 
   // placement (AUTO mode only): most columns start at the top; an occasional
   // first card (~30%) sits noticeably lower so the wall feels hand-arranged.
@@ -187,12 +190,15 @@ const MemoryCard = forwardRef(function MemoryCard({
       dragConstraints={dragBounds || undefined}
       dragElastic={0.05}
       dragMomentum={false}
-      onDragStart={onDragStart ? () => onDragStart(m.id) : undefined}
+      onPointerDownCapture={() => { draggedRef.current = false }}
+      onDragStart={() => { draggedRef.current = true; onDragStart?.(m.id) }}
       onDragEnd={onDragEnd ? (_, info) => onDragEnd(m.id, info) : undefined}
       // lift while dragging: small scale-up + raised shadow + higher z + shadow
       whileDrag={{ scale: 1.04, zIndex: 50, boxShadow: '0 14px 36px rgba(20,20,40,0.22)' }}
       whileHover={{ scale: 0.98 }}
       onClick={(e) => {
+        // a drag just happened — swallow the click so we don't open the lightbox
+        if (draggedRef.current) { draggedRef.current = false; return }
         if (e.target.closest('button, .audio-pill')) return
         if (type !== 'note' && !isQuote) onOpen(m.id)
       }}
