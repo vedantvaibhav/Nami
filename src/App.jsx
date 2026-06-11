@@ -10,8 +10,8 @@ import { kindFromMime, MAX_SAFE_BYTES } from './media.js'
 import { ZOOMS, markerLabel, toISO, fromISO, unitStart } from './time.js'
 
 const MARKER_H = 130 // px reserved at top for date markers
-// One shared, unhurried spring for everything the pill does — slow and liquidy
-const LIQUID = { type: 'spring', stiffness: 170, damping: 26, mass: 1 }
+// The zoom-pill morph — snappy but still liquid, critically damped (no wobble)
+const LIQUID = { type: 'spring', stiffness: 230, damping: 30, mass: 1 }
 // The dock morph — each direction tuned separately
 const SHELL_OPEN = { type: 'spring', stiffness: 250, damping: 30, mass: 1 }      // lively, settles a bit quicker
 const SHELL_CLOSE = { type: 'spring', stiffness: 190, damping: 32, mass: 1.05 }  // slow, liquid settle
@@ -37,13 +37,14 @@ const COL_TOP = MARKER_H + 20      // column's top offset inside the canvas (mat
 const DOCK_CLEARANCE = 96          // bottom margin that clears the floating dock
 const SNAP_THRESHOLD = 12          // gentle magnetic snap distance (px)
 const MIN_GAP = 14                 // minimum gap kept between two cards (matches the auto flex gap)
-// settle for a card committing to its snapped/clamped Y on drop — a fast,
-// decisive "click into place". Overdamped spring => quick + zero overshoot.
-const CARD_SETTLE = { type: 'spring', stiffness: 700, damping: 60, mass: 1 }
+// settle for a card committing to its snapped/clamped Y on drop — an instant,
+// decisive slide into place. Short tween, racing ease-out, NO spring => it is
+// physically impossible for the drop to bounce.
+const CARD_SETTLE = { type: 'tween', duration: 0.13, ease: [0.25, 1, 0.5, 1] }
 
-// a soft, subtle "tock" synthesised on drop (no asset needed)
+// ---- tiny synthesised sound kit (no assets) + haptics -------------------
 let _audioCtx = null
-function playDrop() {
+function blip(f0, f1, dur, vol) {
   try {
     _audioCtx = _audioCtx || new (window.AudioContext || window.webkitAudioContext)()
     const ctx = _audioCtx
@@ -52,15 +53,18 @@ function playDrop() {
     const osc = ctx.createOscillator()
     const gain = ctx.createGain()
     osc.type = 'sine'
-    osc.frequency.setValueAtTime(210, t)
-    osc.frequency.exponentialRampToValueAtTime(130, t + 0.08)
+    osc.frequency.setValueAtTime(f0, t)
+    osc.frequency.exponentialRampToValueAtTime(f1, t + dur * 0.7)
     gain.gain.setValueAtTime(0.0001, t)
-    gain.gain.exponentialRampToValueAtTime(0.06, t + 0.005)
-    gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.12)
+    gain.gain.exponentialRampToValueAtTime(vol, t + 0.006)
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + dur)
     osc.connect(gain); gain.connect(ctx.destination)
-    osc.start(t); osc.stop(t + 0.13)
+    osc.start(t); osc.stop(t + dur + 0.02)
   } catch { /* audio unavailable — silent */ }
 }
+const playPick = () => blip(440, 560, 0.05, 0.025)                                 // picking a card up
+const playDrop = () => { blip(220, 140, 0.09, 0.05); navigator.vibrate?.(8) }      // dropping it
+const playZoom = () => { blip(300, 440, 0.1, 0.04); navigator.vibrate?.(6) }       // changing Days/Months/Years
 
 export default function App() {
   const [memories, setMemories] = useState(null)
@@ -282,6 +286,7 @@ export default function App() {
       const maxScroll = el.scrollWidth - el.clientWidth
       pendingCenter.current = maxScroll > 0 ? el.scrollLeft / maxScroll : 0
     }
+    playZoom()
     setZoomIdx(idx)
   }
 
@@ -338,13 +343,14 @@ export default function App() {
   }, [])
 
   // First drag in an auto column flips the WHOLE column to manual (for this
-  // view). Fires at drag START so the switch is atomic: every card's pos[view]
-  // is seeded from its CURRENT offsetTop and all cards become absolutely placed
-  // in the same render — so nothing reflows and the dragged card stays exactly
-  // under the cursor (its top = offsetTop, framer keeps driving the yMV offset).
+  // view). Runs inside the pointermove that crosses the drag threshold, and
+  // SYNCHRONOUSLY (flushSync): every card's pos[view] is seeded from its
+  // CURRENT offsetTop and all become absolutely placed before the first drag
+  // offset is written — nothing reflows, the card stays under the cursor.
   const onCardDragStart = useCallback((id, items) => {
+    playPick()
     if (isManualCol(items.list)) return // already manual — nothing to flip/seed
-    setMemories((ms) =>
+    flushSync(() => setMemories((ms) =>
       ms.map((m) => {
         if (!items.list.some((it) => it.id === m.id)) return m
         if (m.pos && m.pos[view] != null) return m // already seeded for this view
@@ -354,27 +360,30 @@ export default function App() {
         const seedY = el ? el.offsetTop : 0
         return { ...m, pos: { ...(m.pos || {}), [view]: seedY } }
       })
-    )
+    ))
   }, [view])
 
   // Commit a drag: free vertical placement with a GENTLE magnetic snap so the
   // card abuts a neighbour (sits just above/below it, never aligned-on-top),
   // clamped on-screen, then a final no-overlap resolve so cards can NEVER cover
-  // each other. yMV holds framer's raw offset at drop; we move it into pos[view]
-  // and glide yMV → 0 (clean, no bounce).
+  // each other. yMV holds the pointer's clamped offset at drop; we move it into
+  // pos[view] and slide yMV → 0 (fast tween — cannot bounce).
   const commitDrag = useCallback((id, info, items) => {
     const base = memories.find((m) => m.id === id)?.pos?.[view] ?? 0
     const raw = base + info.offset.y // where the card actually is at drop
     const h = cardHeight(id)
     const maxTop = Math.max(0, visibleHeight - h)
 
-    // other cards' occupied [top, bottom] bands for this column/view
+    // other cards' occupied [top, bottom] bands for this column/view — read from
+    // the LIVE DOM (offsetTop/offsetHeight), not stale state, so no-overlap holds
+    // on the very first drag of a column and with freshly-loaded image heights
     const bands = []
     for (const it of items) {
       if (it.id === id) continue
-      const top = it.pos?.[view]
+      const el = cardRefs.current.get(it.id)
+      const top = el ? el.offsetTop : it.pos?.[view]
       if (top == null) continue
-      bands.push({ top, bottom: top + cardHeight(it.id) })
+      bands.push({ top, bottom: top + (el?.offsetHeight || 120) })
     }
 
     // gentle snap anchors: the column top, and ABUTTING each neighbour but with
@@ -578,6 +587,16 @@ export default function App() {
               // a column is fully auto (flex stack + scatter) or fully manual
               // (absolute Y per card) for THIS view; the first drag flips it.
               const isManual = isManualCol(items)
+              // cards WITHOUT a saved pos in a manual column (e.g. a memory just
+              // added to a hand-arranged day) stack sequentially below the lowest
+              // placed card — never at 0, never overlapping
+              let fallbackCursor = 0
+              if (isManual) {
+                for (const it of items) {
+                  const p = it.pos?.[view]
+                  if (p != null) fallbackCursor = Math.max(fallbackCursor, p + cardHeight(it.id))
+                }
+              }
               return (
               <div
                 key={key}
@@ -595,9 +614,16 @@ export default function App() {
                     // (commitDrag clampY): you can never *place* a card off-screen.
                     // In auto mode the card's real top is its live flex offsetTop
                     // (used so the first-drag bounds are correct before the flip).
-                    const top = isManual
-                      ? (m.pos?.[view] ?? 0)
-                      : (cardRefs.current.get(m.id)?.offsetTop ?? 0)
+                    let top
+                    if (isManual) {
+                      if (m.pos?.[view] != null) top = m.pos[view]
+                      else {
+                        top = fallbackCursor + MIN_GAP
+                        fallbackCursor = top + cardHeight(m.id)
+                      }
+                    } else {
+                      top = cardRefs.current.get(m.id)?.offsetTop ?? 0
+                    }
                     return (
                     <MemoryCard
                       key={m.id}

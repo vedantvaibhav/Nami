@@ -120,10 +120,11 @@ const MemoryCard = forwardRef(function MemoryCard({
   m, index = 0, entered = false,
   // manual placement (vertical drag): when `manual` is true the card is
   // absolutely positioned at `manualY` (its committed top); `yMV` is a TRANSIENT
-  // drag offset (0 at rest, framer's drag offset while dragging, springs back to
-  // 0 after the post-drop settle). App owns `yMV` so the settle can compensate
-  // for the snap (set yMV to keep the card under the cursor, then spring to 0).
-  // `drag` is ALWAYS enabled so the first drag in an auto column works first-try.
+  // drag offset (0 at rest; we write the pointer delta into it while dragging,
+  // and App glides it back to 0 after the drop commit). The drag is a CUSTOM
+  // pointer implementation — framer's drag system fought our settle animation
+  // (its constraint snap-back is an uncontrollable bouncy inertia), which was
+  // the source of the drop bounce and the glitchy feel.
   manual = false, manualY = 0, yMV, dragBounds = null,
   onDragStart, onDragEnd,
   onDelete, onOpen,
@@ -131,9 +132,46 @@ const MemoryCard = forwardRef(function MemoryCard({
   const type = inferType(m)
   const color = COLORS[m.color] || COLORS.blue
   const isQuote = type === 'quote'
-  // distinguishes a drag from a click: set on drag start, reset on each fresh
-  // pointer-down, consumed by onClick so a drag never opens the lightbox
+  // distinguishes a drag from a click: set once the pointer moves past the
+  // threshold, consumed by onClick so a drag never opens the lightbox
   const draggedRef = useRef(false)
+  // live gesture state: { startY, pointerId, moved, el }
+  const gestureRef = useRef(null)
+
+  const startDrag = (e) => {
+    if (e.button !== undefined && e.button !== 0) return
+    if (e.target.closest('button, .audio-pill')) return
+    draggedRef.current = false
+    gestureRef.current = { startY: e.clientY, pointerId: e.pointerId, moved: false, el: e.currentTarget }
+  }
+  const moveDrag = (e) => {
+    const s = gestureRef.current
+    if (!s || e.pointerId !== s.pointerId) return
+    const dy = e.clientY - s.startY
+    if (!s.moved) {
+      if (Math.abs(dy) < 4) return // dead zone: taps/clicks never start a drag
+      s.moved = true
+      draggedRef.current = true
+      try { s.el.setPointerCapture(s.pointerId) } catch { /* synthetic pointers */ }
+      s.el.style.zIndex = '60'
+      // flips the column to manual SYNCHRONOUSLY (App uses flushSync), so this
+      // card is absolute + bound to yMV before the first offset is written
+      onDragStart?.(m.id)
+    }
+    // clamp live so the card physically can't leave the visible band
+    const b = dragBounds
+    yMV.set(b ? Math.min(Math.max(dy, b.top), b.bottom) : dy)
+  }
+  const endDrag = (e) => {
+    const s = gestureRef.current
+    if (!s || e.pointerId !== s.pointerId) return
+    gestureRef.current = null
+    if (!s.moved) return
+    try { s.el.releasePointerCapture(s.pointerId) } catch { /* already released */ }
+    const el = s.el
+    setTimeout(() => { el.style.zIndex = '' }, 200) // after the settle finishes
+    onDragEnd?.(m.id, { offset: { y: yMV.get() } })
+  }
 
   // placement (AUTO mode only): most columns start at the top; an occasional
   // first card (~30%) sits noticeably lower so the wall feels hand-arranged.
@@ -144,9 +182,9 @@ const MemoryCard = forwardRef(function MemoryCard({
   // base (auto) inline style — flex stack with the scatter margin. We do NOT put
   // `yMV` here: in auto mode `layout="position"` (the toggle glide) owns the
   // transform, and mixing an explicit `y` motion value with `layout` fights it.
-  // The first drag of an auto card uses framer's internal drag transform; on the
-  // flip to manual (onDragStart) framer seamlessly continues onto `yMV` (both
-  // start at 0 and carry the same offset, so the switch is continuous).
+  // The first drag's flip to manual happens SYNCHRONOUSLY (flushSync in App)
+  // inside the pointermove that crosses the threshold, before any offset is
+  // written — so the card is already absolute + yMV-bound when it starts moving.
   const autoStyle = isQuote
     ? { marginTop: scatter }
     : { marginTop: scatter, background: color.bg }
@@ -174,30 +212,23 @@ const MemoryCard = forwardRef(function MemoryCard({
       animate={{ opacity: 1 }}
       exit={{ opacity: 0, transition: { duration: 0.16, ease: 'easeOut' } }}
       transition={{
-        // gesture transforms (whileHover / whileDrag scale, shadow) settle on a
-        // quick tween — NO spring, so releasing a drag doesn't bounce the card
+        // gesture transforms (whileHover / whileTap scale, shadow) settle on a
+        // quick tween — NO spring, so releasing a press never bounces the card
         default: { type: 'tween', duration: 0.14, ease: 'easeOut' },
         opacity: { duration: 0.34, ease: [0.16, 1, 0.3, 1], delay: Math.min(index, 6) * 0.04 },
-        // the toggle glide — smooth, a touch faster than before
-        layout: { type: 'spring', stiffness: 120, damping: 22, mass: 1 },
+        // the toggle glide — quicker and critically damped (no float, no wobble)
+        layout: { type: 'spring', stiffness: 170, damping: 26, mass: 1 },
       }}
-      // ---- vertical drag (always enabled) ----
-      // drag is ALWAYS on so the FIRST drag in an auto column works on the first
-      // try (framer must own the gesture from pointer-down). onDragStart flips the
-      // whole column to manual atomically: every card's pos[view] is seeded from
-      // its current offsetTop and all become absolutely placed in the same render,
-      // so nothing reflows and this card stays under the cursor (top=offsetTop,
-      // framer keeps driving the yMV offset). On drop App snaps/clamps the new top
-      // and springs the transient yMV back to 0 (the magnetic settle).
-      drag="y"
-      dragConstraints={dragBounds || undefined}
-      dragElastic={0.05}
-      dragMomentum={false}
-      onPointerDownCapture={() => { draggedRef.current = false }}
-      onDragStart={() => { draggedRef.current = true; onDragStart?.(m.id) }}
-      onDragEnd={onDragEnd ? (_, info) => onDragEnd(m.id, info) : undefined}
-      // lift while dragging: gentle scale-up + a soft, light shadow + higher z
-      whileDrag={{ scale: 1.03, zIndex: 50, boxShadow: '0 6px 16px rgba(20,20,40,0.12)' }}
+      // ---- vertical drag (custom pointer implementation) ----
+      // We own the whole gesture: pointer delta -> yMV (clamped live), drop ->
+      // App commits the snapped top and glides yMV back to 0. ONE animation,
+      // zero framer drag inertia, so the drop can't bounce or glitch.
+      onPointerDown={startDrag}
+      onPointerMove={moveDrag}
+      onPointerUp={endDrag}
+      onPointerCancel={endDrag}
+      // lift on press (covers the whole drag too — tap has gesture priority)
+      whileTap={{ scale: 1.02, boxShadow: '0 6px 16px rgba(20,20,40,0.12)' }}
       whileHover={{ scale: 0.98 }}
       onClick={(e) => {
         // a drag just happened — swallow the click so we don't open the lightbox

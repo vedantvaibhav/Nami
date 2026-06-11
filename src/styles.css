@@ -76,6 +76,8 @@ body {
   border-radius: 16px; padding: 16px 16px 14px;
   cursor: grab; user-select: none;
   box-shadow: none;
+  /* vertical drags belong to the card; horizontal pans still scroll the timeline */
+  touch-action: pan-x;
 }
 .card:active { cursor: grabbing; }
 .card:hover .card-delete { opacity: 1; }
