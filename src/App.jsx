@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { flushSync } from 'react-dom'
 import { AnimatePresence, LayoutGroup, animate, motion, motionValue, useMotionValue } from 'framer-motion'
 import MemoryCard from './MemoryCard.jsx'
 import YearOrbit from './YearOrbit.jsx'
@@ -35,9 +36,31 @@ const COL_W = 340 // fixed column width — populated dates lay out sequentially
 const COL_TOP = MARKER_H + 20      // column's top offset inside the canvas (matches .column top)
 const DOCK_CLEARANCE = 96          // bottom margin that clears the floating dock
 const SNAP_THRESHOLD = 12          // gentle magnetic snap distance (px)
+const MIN_GAP = 14                 // minimum gap kept between two cards (matches the auto flex gap)
 // settle for a card committing to its snapped/clamped Y on drop — a clean,
 // quick glide with NO bounce
 const CARD_SETTLE = { type: 'tween', duration: 0.2, ease: [0.22, 1, 0.36, 1] }
+
+// a soft, subtle "tock" synthesised on drop (no asset needed)
+let _audioCtx = null
+function playDrop() {
+  try {
+    _audioCtx = _audioCtx || new (window.AudioContext || window.webkitAudioContext)()
+    const ctx = _audioCtx
+    if (ctx.state === 'suspended') ctx.resume()
+    const t = ctx.currentTime
+    const osc = ctx.createOscillator()
+    const gain = ctx.createGain()
+    osc.type = 'sine'
+    osc.frequency.setValueAtTime(210, t)
+    osc.frequency.exponentialRampToValueAtTime(130, t + 0.08)
+    gain.gain.setValueAtTime(0.0001, t)
+    gain.gain.exponentialRampToValueAtTime(0.06, t + 0.005)
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.12)
+    osc.connect(gain); gain.connect(ctx.destination)
+    osc.start(t); osc.stop(t + 0.13)
+  } catch { /* audio unavailable — silent */ }
+}
 
 export default function App() {
   const [memories, setMemories] = useState(null)
@@ -354,10 +377,10 @@ export default function App() {
       bands.push({ top, bottom: top + cardHeight(it.id) })
     }
 
-    // gentle snap anchors: the column top, and ABUTTING each neighbour — just
-    // below it (top = band.bottom) or just above it (top = band.top - h)
+    // gentle snap anchors: the column top, and ABUTTING each neighbour but with
+    // MIN_GAP of breathing room — just below it or just above it
     const anchors = [0]
-    for (const b of bands) { anchors.push(b.bottom); anchors.push(b.top - h) }
+    for (const b of bands) { anchors.push(b.bottom + MIN_GAP); anchors.push(b.top - h - MIN_GAP) }
     let y = raw
     let best = null
     for (const a of anchors) {
@@ -367,22 +390,27 @@ export default function App() {
     if (best) y = best.a
     y = Math.min(Math.max(0, y), maxTop) // never off-screen / under the dock
 
-    // no overlap: if [y, y+h] still intersects a neighbour, move to the nearest
-    // gap that fits (just below / just above a band, the top line, or the max)
-    const fits = (p) => p >= 0 && p <= maxTop && !bands.some((b) => p < b.bottom && p + h > b.top)
-    if (!fits(y)) {
+    // no overlap: a card must keep at least MIN_GAP from every neighbour. If it
+    // doesn't, move to the nearest position that does (below/above a band, the
+    // top line, or the max).
+    const clear = (p) => p >= 0 && p <= maxTop && !bands.some((b) => p < b.bottom + MIN_GAP && p + h > b.top - MIN_GAP)
+    if (!clear(y)) {
       const cands = [0, maxTop]
-      for (const b of bands) { cands.push(b.bottom); cands.push(b.top - h) }
-      const ok = cands.filter(fits).sort((a, b) => Math.abs(a - y) - Math.abs(b - y))
+      for (const b of bands) { cands.push(b.bottom + MIN_GAP); cands.push(b.top - h - MIN_GAP) }
+      const ok = cands.filter(clear).sort((a, b) => Math.abs(a - y) - Math.abs(b - y))
       if (ok.length) y = ok[0]
     }
 
-    // keep the card visually where it was dropped, then glide the offset to 0
+    // commit the new top SYNCHRONOUSLY (flushSync), then set the transient offset
+    // so the card stays exactly where it was dropped, and glide that offset to 0.
+    // Doing the top commit in the same frame as the offset avoids the one-frame
+    // flash (the "glitch") you'd get if `top` (state) and the transform updated on
+    // different frames.
     const mv = cardYMV(id)
+    flushSync(() => setMemories((ms) => ms.map((m) => (m.id === id ? { ...m, pos: { ...(m.pos || {}), [view]: y } } : m))))
     mv.set(raw - y)
     animate(mv, 0, CARD_SETTLE)
-
-    setMemories((ms) => ms.map((m) => (m.id === id ? { ...m, pos: { ...(m.pos || {}), [view]: y } } : m)))
+    playDrop()
   }, [view, visibleHeight, memories, cardYMV])
 
   // completely random pastel from the palette; fixed once assigned

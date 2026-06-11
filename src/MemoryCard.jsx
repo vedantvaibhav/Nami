@@ -193,8 +193,8 @@ const MemoryCard = forwardRef(function MemoryCard({
       onPointerDownCapture={() => { draggedRef.current = false }}
       onDragStart={() => { draggedRef.current = true; onDragStart?.(m.id) }}
       onDragEnd={onDragEnd ? (_, info) => onDragEnd(m.id, info) : undefined}
-      // lift while dragging: small scale-up + raised shadow + higher z + shadow
-      whileDrag={{ scale: 1.04, zIndex: 50, boxShadow: '0 14px 36px rgba(20,20,40,0.22)' }}
+      // lift while dragging: gentle scale-up + a soft, light shadow + higher z
+      whileDrag={{ scale: 1.03, zIndex: 50, boxShadow: '0 6px 16px rgba(20,20,40,0.12)' }}
       whileHover={{ scale: 0.98 }}
       onClick={(e) => {
         // a drag just happened — swallow the click so we don't open the lightbox
