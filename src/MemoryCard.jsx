@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { forwardRef, useEffect, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
 import { COLORS, imageURL } from './store.js'
 import { icons, inferType, seededBars, seededTilt, seedFrac, videoThumb } from './media.js'
@@ -114,33 +114,59 @@ export function AudioBlock({ m, tall = false }) {
 }
 
 // ---- the card --------------------------------------------------------------
-export default function MemoryCard({
+// `forwardRef` so App can read a card's live `offsetTop` when a column flips
+// from auto → manual (seed manual Y from the current rendered layout = no jump).
+const MemoryCard = forwardRef(function MemoryCard({
   m, index = 0, entered = false,
+  // manual placement (vertical drag): when `manual` is true the card is
+  // absolutely positioned at `manualY` (its committed top); `yMV` is a TRANSIENT
+  // drag offset (0 at rest, framer's drag offset while dragging, springs back to
+  // 0 after the post-drop settle). App owns `yMV` so the settle can compensate
+  // for the snap (set yMV to keep the card under the cursor, then spring to 0).
+  // `drag` is ALWAYS enabled so the first drag in an auto column works first-try.
+  manual = false, manualY = 0, yMV, dragBounds = null,
+  onDragStart, onDragEnd,
   onDelete, onOpen,
-}) {
+}, ref) {
   const type = inferType(m)
   const color = COLORS[m.color] || COLORS.blue
   const isQuote = type === 'quote'
 
-  // placement: most columns start at the top; an occasional first card (~30%)
-  // sits noticeably lower so the wall feels hand-arranged. Cards after the
-  // first keep one uniform gap (the column's flex gap) — no extra randomness.
+  // placement (AUTO mode only): most columns start at the top; an occasional
+  // first card (~30%) sits noticeably lower so the wall feels hand-arranged.
+  // Cards after the first keep one uniform gap (the column's flex gap).
   const f = seedFrac(m.id + ':y')
   const scatter = index === 0 && f >= 0.7 ? Math.round(140 + f * 120) : 0
 
+  // base (auto) inline style — flex stack with the scatter margin. We do NOT put
+  // `yMV` here: in auto mode `layout="position"` (the toggle glide) owns the
+  // transform, and mixing an explicit `y` motion value with `layout` fights it.
+  // The first drag of an auto card uses framer's internal drag transform; on the
+  // flip to manual (onDragStart) framer seamlessly continues onto `yMV` (both
+  // start at 0 and carry the same offset, so the switch is continuous).
+  const autoStyle = isQuote
+    ? { marginTop: scatter }
+    : { marginTop: scatter, background: color.bg }
+  // manual inline style — absolutely positioned at the committed `manualY`; `yMV`
+  // is the transient drag offset on top of it (0 at rest). `layout` is OFF here.
+  const manualStyle = isQuote
+    ? { position: 'absolute', top: manualY, left: 0, width: '100%', y: yMV }
+    : { position: 'absolute', top: manualY, left: 0, width: '100%', background: color.bg, y: yMV }
+
   return (
     <motion.div
-      // shared id so the card glides from its Days slot to its Months slot
-      // (and back) on toggle. layout="position" => animate ONLY the move, never
-      // the size — otherwise the card balloons in height while the image
-      // re-measures mid-transition. enter is opacity-only for the same reason
-      // (a scale/y transform fights the layout transform).
-      layoutId={m.id}
-      layout="position"
-      className={`card ${isQuote ? 'card-quote' : ''}`}
-      style={isQuote ? { marginTop: scatter } : { marginTop: scatter, background: color.bg }}
+      ref={ref}
+      // Toggle glide (Days↔Months): shared-layout flight via layoutId +
+      // layout="position" => animate ONLY the move, never the size (otherwise the
+      // card balloons in height while images re-measure mid-transition). DISABLED
+      // in manual mode — the absolute `top` + `y` transform is the source of
+      // truth and a shared-layout transform would fight the drag/clamp.
+      layoutId={manual ? undefined : m.id}
+      layout={manual ? false : 'position'}
+      className={`card ${isQuote ? 'card-quote' : ''} ${manual ? 'card-manual' : ''}`}
+      style={manual ? manualStyle : autoStyle}
       // fade in only on the first load; on toggle re-mounts start visible so the
-      // card just glides (no opacity flicker)
+      // card just glides (no opacity flicker).
       initial={entered ? false : { opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0, transition: { duration: 0.16, ease: 'easeOut' } }}
@@ -149,6 +175,22 @@ export default function MemoryCard({
         // the toggle glide — smooth, a touch faster than before
         layout: { type: 'spring', stiffness: 120, damping: 22, mass: 1 },
       }}
+      // ---- vertical drag (always enabled) ----
+      // drag is ALWAYS on so the FIRST drag in an auto column works on the first
+      // try (framer must own the gesture from pointer-down). onDragStart flips the
+      // whole column to manual atomically: every card's pos[view] is seeded from
+      // its current offsetTop and all become absolutely placed in the same render,
+      // so nothing reflows and this card stays under the cursor (top=offsetTop,
+      // framer keeps driving the yMV offset). On drop App snaps/clamps the new top
+      // and springs the transient yMV back to 0 (the magnetic settle).
+      drag="y"
+      dragConstraints={dragBounds || undefined}
+      dragElastic={0.05}
+      dragMomentum={false}
+      onDragStart={onDragStart ? () => onDragStart(m.id) : undefined}
+      onDragEnd={onDragEnd ? (_, info) => onDragEnd(m.id, info) : undefined}
+      // lift while dragging: small scale-up + raised shadow + higher z + shadow
+      whileDrag={{ scale: 1.04, zIndex: 50, boxShadow: '0 14px 36px rgba(20,20,40,0.22)' }}
       whileHover={{ scale: 0.98 }}
       onClick={(e) => {
         if (e.target.closest('button, .audio-pill')) return
@@ -188,4 +230,6 @@ export default function MemoryCard({
       )}
     </motion.div>
   )
-}
+})
+
+export default MemoryCard

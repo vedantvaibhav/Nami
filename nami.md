@@ -44,6 +44,9 @@ A **memory** object (stored in the `memories` array, persisted as a list):
   date: 'YYYY-MM-DD',    // day the memory belongs to (no future dates allowed)
   media: [{ id, kind, name }],  // kind: 'image' | 'video' | 'audio'; blob stored by id (max 4 images)
   color: 'blue'|'yellow'|'pink'|'purple'|'mint'|'peach',  // fixed at creation
+  pos?: { days?: number, months?: number }, // OPTIONAL manual vertical placement
+                                             // (px from the column top), PER VIEW.
+                                             // Absent ⇒ that column is still auto.
 }
 ```
 
@@ -107,6 +110,52 @@ tracks scroll, and you can drag it. See `syncThumb` / `thumbX` / `thumbWmv`.
 
 ---
 
+## Manual card placement (vertical drag)
+
+In the **2D timeline only** (Days + Months; the Years orbit is unaffected) a card can be
+**dragged vertically within its own date column** to reposition it. The card's X is fixed
+(full column width) and its **date never changes** — no horizontal / cross-column drag.
+
+**Auto vs manual, per column, per view.** A column is either:
+- **auto** — the default flex stack + seeded `scatter` (top-aligned, 14px gap), or
+- **manual** — every card absolutely positioned at its own `top` (`m.pos[view]`).
+
+The **first drag** in a column **flips that whole column to manual** for the current view.
+It flips at **drag start** (`onCardDragStart` in `App.jsx`): every card's `pos[view]` is
+seeded from its **current `offsetTop`** and all cards become absolutely placed in the *same
+render*, so nothing reflows and the dragged card stays under the cursor (no visual jump).
+State lives in `App.jsx`: `manualCols` (a `Set` of `` `${view}:${columnKey}` ``).
+
+**Persistence.** Manual Y is stored on the memory as **`m.pos = { days?, months? }`** (a memory
+sits in both a Days column and a Months column at independent positions). It rides the existing
+debounced `saveMemories` autosave (which only strips the transient `warnLarge` flag), so it
+survives reload. Transient drag state is NOT persisted (see below).
+
+**The transient `yMV`.** Each card has a per-id **`MotionValue`** (App's `yMVs` map, via
+`cardYMV`) carrying only the *transient drag offset* (0 at rest). framer's `drag="y"` writes it
+live; `m.pos[view]` is the committed `top`. On drop (`commitDrag`): `raw = pos + offset`, apply a
+**gentle magnetic snap** (`SNAP_THRESHOLD = 12px`) to the column top (0) or a neighbour card's
+top/bottom edge, then **clamp** to `[0, visibleHeight - cardHeight]`. The card is kept under the
+cursor (`yMV = raw - target`) and `yMV` is then **sprung to 0** (`CARD_SETTLE`) so it settles
+magnetically rather than snapping abruptly. `drag` is **always enabled** so the first drag in an
+auto column works on the first try (framer must own the gesture from pointer-down).
+
+**Always on-screen.** `visibleHeight = window.innerHeight - (MARKER_H+20) - DOCK_CLEARANCE(96)`,
+recomputed from the live viewport height (`vh` state) so it adapts to resize / bigger screens.
+`clampY` keeps every card fully visible and clear of the floating dock; `dragConstraints`
+(`dragBounds`, expressed on the transient `yMV` offset) enforce the same band during the drag.
+
+**Integration notes.**
+- Manual cards set `layout={false}` / `layoutId={undefined}` — the absolute `top` + `yMV`
+  transform is the source of truth, and a shared-layout transform would fight the drag/clamp.
+  Consequence: a manual column **opts out of the Days↔Months toggle glide** for that view.
+- Auto cards keep `layout="position"` + `layoutId={m.id}` (the glide). They do **not** carry
+  `yMV` in `style` (mixing an explicit `y` with `layout` fights it); the first auto drag uses
+  framer's internal drag transform and continues seamlessly onto `yMV` at the flip.
+- Drag lift = `whileDrag` (scale 1.04 + raised shadow + z-index 50).
+
+---
+
 ## Key conventions / invariants
 
 - **No future dates.** New cards and the calendar clamp to today (`todayISO()`).
@@ -125,10 +174,11 @@ tracks scroll, and you can drag it. See `syncThumb` / `thumbX` / `thumbWmv`.
   white-framed prints side by side, overlapping edges, seeded tilts.
 - **Photo expand = spread collage** (`COLLAGE` slots in `Lightbox.jsx`, up to 4 prints,
   minimal overlap so every print stays visible).
-- **Scattered placement**: cards are **mostly top-anchored** — the first card in a column
-  has `marginTop: 0` ~70% of the time, occasionally dropping to ~140–260px. Consecutive
-  cards keep ONE uniform gap (the column's 14px flex gap — no extra randomness).
-  Stable per card (`seedFrac`), never overlapping.
+- **Scattered placement (AUTO columns)**: cards are **mostly top-anchored** — the first card
+  in a column has `marginTop: 0` ~70% of the time, occasionally dropping to ~140–260px.
+  Consecutive cards keep ONE uniform gap (the column's 14px flex gap — no extra randomness).
+  Stable per card (`seedFrac`), never overlapping. Once a column is dragged it becomes
+  **manual** for that view and scatter no longer applies (see *Manual card placement*).
 - **Hover**: the card scales *down* slightly (`whileHover scale 0.98`) and the × delete
   appears. **No inline editing** — clicking a media card opens the lightbox; notes/quotes
   do nothing on click. The composer is the only add path (drop/paste create a card

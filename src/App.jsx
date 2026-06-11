@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { AnimatePresence, LayoutGroup, animate, motion, useMotionValue } from 'framer-motion'
+import { AnimatePresence, LayoutGroup, animate, motion, motionValue, useMotionValue } from 'framer-motion'
 import MemoryCard from './MemoryCard.jsx'
 import YearOrbit from './YearOrbit.jsx'
 import Lightbox from './Lightbox.jsx'
@@ -32,6 +32,13 @@ const APP_ENTER = { duration: 0.6, ease: SWIFT }
 const DAY_LIMIT = 2 // max memories per day
 const COL_W = 340 // fixed column width — populated dates lay out sequentially
 
+// ---- manual vertical placement (drag-to-reposition) ----
+const COL_TOP = MARKER_H + 20      // column's top offset inside the canvas (matches .column top)
+const DOCK_CLEARANCE = 96          // bottom margin that clears the floating dock
+const SNAP_THRESHOLD = 12          // gentle magnetic snap distance (px)
+// settle spring for a card committing to its snapped/clamped Y on drop
+const CARD_SETTLE = { type: 'spring', stiffness: 340, damping: 30, mass: 1 }
+
 export default function App() {
   const [memories, setMemories] = useState(null)
   const [zoomIdx, setZoomIdx] = useState(2) // open in Years view on load
@@ -54,6 +61,20 @@ export default function App() {
   const [toast, setToast] = useState(null)
   const toastTimer = useRef(null)
   const scrollRef = useRef(null)
+
+  // ---- manual placement (vertical drag) --------------------------------
+  // Which columns are in MANUAL mode, keyed `${view}:${columnKey}`. A column is
+  // either fully auto (flex stack + scatter) or fully manual (absolute Y/card).
+  // The FIRST drag in a column flips it for that view.
+  // live DOM refs to each rendered card, so we can read offsetTop when seeding
+  // manual Y from the current auto layout (no visual jump at the switch).
+  const cardRefs = useRef(new Map()) // m.id -> element
+  const setCardRef = useCallback((id, el) => {
+    if (el) cardRefs.current.set(id, el)
+    else cardRefs.current.delete(id)
+  }, [])
+  // m.id -> MotionValue for the transient vertical drag offset (see cardYMV)
+  const yMVs = useRef(new Map())
 
   const zoom = ZOOMS[zoomIdx]
   const isYears = zoom.id === 'years'
@@ -138,10 +159,11 @@ export default function App() {
     }
   }, [memories])
 
-  // ---- viewport width (mobile responsiveness) ---------------------------
+  // ---- viewport width + height (responsiveness; height drives drag clamp) ----
   const [vw, setVw] = useState(typeof window !== 'undefined' ? window.innerWidth : 1280)
+  const [vh, setVh] = useState(typeof window !== 'undefined' ? window.innerHeight : 800)
   useEffect(() => {
-    const onResize = () => setVw(window.innerWidth)
+    const onResize = () => { setVw(window.innerWidth); setVh(window.innerHeight) }
     window.addEventListener('resize', onResize)
     return () => window.removeEventListener('resize', onResize)
   }, [])
@@ -258,10 +280,97 @@ export default function App() {
       const m = ms.find((x) => x.id === id)
       m?.media?.forEach((x) => deleteImage(x.id))
       if (m?.imgId) deleteImage(m.imgId)
+      yMVs.current.delete(id) // drop the transient drag motion value
       return ms.filter((x) => x.id !== id)
     })
     setOpenId((cur) => (cur === id ? null : cur))
   }, [])
+
+  // ---- manual placement helpers ----------------------------------------
+  const view = zoom.id // 'days' | 'months' (drag is a 2D-timeline feature only)
+  // A column is MANUAL for this view when any of its cards already has a saved
+  // pos[view]. Deriving this from the data (not local state) means manual
+  // layouts persist across reloads — the saved positions are actually used.
+  const isManualCol = (items) => items.some((it) => it.pos?.[view] != null)
+
+  // The vertical band a card may occupy: from the column top (0) down to just
+  // above the floating dock. Recomputed from viewport height so it adapts to
+  // bigger screens / resize. `bottom` is the max TOP a card can take.
+  const visibleHeight = Math.max(120, vh - COL_TOP - DOCK_CLEARANCE)
+
+  // Read a card's height (live element if present, else a sane default).
+  const cardHeight = (id) => cardRefs.current.get(id)?.offsetHeight || 120
+
+  // Clamp a manual top so the card stays fully on-screen and clear of the dock.
+  const clampY = (id, y) => {
+    const max = Math.max(0, visibleHeight - cardHeight(id))
+    return Math.min(Math.max(0, y), max)
+  }
+
+  // Per-card TRANSIENT drag offset (0 at rest). framer's drag writes it live;
+  // after a drop we spring it back to 0 while `pos[view]` (the committed top)
+  // absorbs the move. App owns these so the settle can compensate for the snap.
+  const cardYMV = useCallback((id) => {
+    let mv = yMVs.current.get(id)
+    if (!mv) { mv = motionValue(0); yMVs.current.set(id, mv) }
+    return mv
+  }, [])
+
+  // First drag in an auto column flips the WHOLE column to manual (for this
+  // view). Fires at drag START so the switch is atomic: every card's pos[view]
+  // is seeded from its CURRENT offsetTop and all cards become absolutely placed
+  // in the same render — so nothing reflows and the dragged card stays exactly
+  // under the cursor (its top = offsetTop, framer keeps driving the yMV offset).
+  const onCardDragStart = useCallback((id, items) => {
+    if (isManualCol(items.list)) return // already manual — nothing to flip/seed
+    setMemories((ms) =>
+      ms.map((m) => {
+        if (!items.list.some((it) => it.id === m.id)) return m
+        if (m.pos && m.pos[view] != null) return m // already seeded for this view
+        const el = cardRefs.current.get(m.id)
+        // offsetTop is relative to the .column (offsetParent starts at COL_TOP),
+        // so it's the in-column Y we want.
+        const seedY = el ? el.offsetTop : 0
+        return { ...m, pos: { ...(m.pos || {}), [view]: seedY } }
+      })
+    )
+  }, [view])
+
+  // Commit a drag: free vertical placement with a GENTLE magnetic snap to the
+  // column top (0) or a neighbour card's top/bottom edge, then clamp on-screen.
+  // The transient yMV holds framer's raw offset at drop; we move that offset into
+  // pos[view] (the committed top) and spring yMV → 0 so the card settles with a
+  // soft, magnetic spring rather than snapping abruptly.
+  const commitDrag = useCallback((id, info, items) => {
+    const base = memories.find((m) => m.id === id)?.pos?.[view] ?? 0
+    const raw = base + info.offset.y // where the card actually is at drop
+
+    // gentle snap: candidate anchors = column top + each neighbour's top/bottom
+    const anchors = [0]
+    for (const it of items) {
+      if (it.id === id) continue
+      const top = it.pos?.[view]
+      if (top == null) continue
+      anchors.push(top)
+      anchors.push(top + cardHeight(it.id))
+    }
+    let y = raw
+    let best = null
+    for (const a of anchors) {
+      const d = Math.abs(raw - a)
+      if (d <= SNAP_THRESHOLD && (best == null || d < best.d)) best = { a, d }
+    }
+    if (best) y = best.a
+    y = clampY(id, y) // never off-screen / under the dock
+
+    // keep the card visually where it was dropped (top=target + offset), then
+    // spring the offset to 0 → soft magnetic settle onto the snapped/clamped top
+    const mv = cardYMV(id)
+    mv.set(raw - y)
+    animate(mv, 0, CARD_SETTLE)
+
+    setMemories((ms) => ms.map((m) => (m.id === id ? { ...m, pos: { ...(m.pos || {}), [view]: y } } : m)))
+  }, [view, visibleHeight, memories, cardYMV])
 
   // completely random pastel from the palette; fixed once assigned
   const nextColor = () => COLOR_KEYS[Math.floor(Math.random() * COLOR_KEYS.length)]
@@ -434,26 +543,58 @@ export default function App() {
           {/* one layout group so a card glides from its Days position to its
               Months position (and back) — shared-layout flight on toggle */}
           <LayoutGroup>
-            {columns.map(({ key, colX, items }) => (
+            {columns.map(({ key, colX, items }) => {
+              // a column is fully auto (flex stack + scatter) or fully manual
+              // (absolute Y per card) for THIS view; the first drag flips it.
+              const isManual = isManualCol(items)
+              return (
               <div
                 key={key}
-                className="column"
+                className={`column ${isManual ? 'column-manual' : ''}`}
                 style={{ left: colX + 8, top: MARKER_H + 20, width: COL_W - 16 }}
               >
                 <AnimatePresence>
-                  {items.map((m, idx) => (
+                  {items.map((m, idx) => {
+                    // committed top for this view. We do NOT clamp here: the seed
+                    // equals the card's auto offsetTop (so the flip never jumps),
+                    // and a tall column's lower cards legitimately sit below the
+                    // fold just as they did in auto mode. Clamping every card at
+                    // render would pin them all to the same max and overlap them.
+                    // On-screen safety lives in the drag (dragBounds) + drop
+                    // (commitDrag clampY): you can never *place* a card off-screen.
+                    // In auto mode the card's real top is its live flex offsetTop
+                    // (used so the first-drag bounds are correct before the flip).
+                    const top = isManual
+                      ? (m.pos?.[view] ?? 0)
+                      : (cardRefs.current.get(m.id)?.offsetTop ?? 0)
+                    return (
                     <MemoryCard
                       key={m.id}
+                      ref={(el) => setCardRef(m.id, el)}
                       m={m}
                       index={idx}
                       entered={entered}
+                      manual={isManual}
+                      manualY={isManual ? top : 0}
+                      yMV={cardYMV(m.id)}
+                      // clamp the drag so the card can never go off-screen or
+                      // under the dock. Bounds are on the transient yMV offset,
+                      // relative to the card's current top.
+                      dragBounds={{
+                        top: -top,
+                        bottom: Math.max(0, visibleHeight - cardHeight(m.id)) - top,
+                      }}
+                      onDragStart={() => onCardDragStart(m.id, { key, list: items })}
+                      onDragEnd={(id, info) => commitDrag(id, info, items)}
                       onDelete={removeMemory}
                       onOpen={setOpenId}
                     />
-                  ))}
+                    )
+                  })}
                 </AnimatePresence>
               </div>
-            ))}
+              )
+            })}
           </LayoutGroup>
         </div>
       </div>

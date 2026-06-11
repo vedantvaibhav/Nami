@@ -63,12 +63,21 @@ body {
   position: absolute;
   display: flex; flex-direction: column; gap: 14px;
 }
+/* manual mode: the column becomes a bare positioning context and its cards are
+   absolutely placed at their dragged Y (via a `y` transform). It stretches to
+   the bottom so absolute children have room; the flex gap no longer applies. */
+.column-manual {
+  display: block;
+  bottom: 0;
+}
+.card-manual { will-change: transform; }
 .card {
   position: relative; width: 100%;
   border-radius: 16px; padding: 16px 16px 14px;
-  cursor: pointer; user-select: none;
+  cursor: grab; user-select: none;
   box-shadow: none;
 }
+.card:active { cursor: grabbing; }
 .card:hover .card-delete { opacity: 1; }
 
 .card-title { font-size: 17px; font-weight: 500; letter-spacing: -0.01em; line-height: 1.3; overflow-wrap: anywhere; }
