@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { flushSync } from 'react-dom'
 import { AnimatePresence, LayoutGroup, animate, motion, motionValue, useMotionValue, useTransform } from 'framer-motion'
-import { SWIFT } from './anim.js'
+import { SWIFT, LIQUID } from './anim.js'
 import MemoryCard from './MemoryCard.jsx'
 import YearOrbit from './YearOrbit.jsx'
 import Lightbox from './Lightbox.jsx'
@@ -11,8 +11,7 @@ import { kindFromMime, MAX_SAFE_BYTES } from './media.js'
 import { ZOOMS, markerLabel, toISO, fromISO, unitStart } from './time.js'
 
 const MARKER_H = 130 // px reserved at top for date markers
-// The zoom-pill morph — snappy but still liquid, critically damped (no wobble)
-const LIQUID = { type: 'spring', stiffness: 230, damping: 30, mass: 1 }
+// LIQUID (the shared switch spring — pill morph + card glide) lives in anim.js
 // The dock morph — crisp, physical, essentially critically damped (no double-bounce)
 const SHELL_OPEN = { type: 'spring', stiffness: 380, damping: 38, mass: 1 }
 const SHELL_CLOSE = { type: 'spring', stiffness: 320, damping: 36, mass: 1 }

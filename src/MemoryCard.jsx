@@ -2,7 +2,7 @@ import { forwardRef, memo, useEffect, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
 import { COLORS, imageURL } from './store.js'
 import { icons, inferType, seededBars, seededTilt, seedFrac, videoThumb } from './media.js'
-import { SWIFT } from './anim.js'
+import { SWIFT, LIQUID } from './anim.js'
 
 export function useImage(imgId) {
   const [url, setUrl] = useState(null)
@@ -237,9 +237,10 @@ const MemoryCard = forwardRef(function MemoryCard({
         // quick tween — NO spring, so releasing a press never bounces the card
         default: { type: 'tween', duration: 0.14, ease: 'easeOut' },
         opacity: { duration: 0.34, ease: SWIFT, delay: Math.min(index, 6) * 0.04 },
-        // the toggle glide — quicker and critically damped (no float, no wobble);
-        // instant during drag-owned renders (see instantLayout above)
-        layout: instantLayout ? { duration: 0 } : { type: 'spring', stiffness: 170, damping: 26, mass: 1 },
+        // the Days↔Months glide uses the SAME LIQUID spring as the zoom pill,
+        // so pill + crossfade + cards land together as one motion (no slow
+        // drift, no tail). Instant during drag-owned renders (see instantLayout).
+        layout: instantLayout ? { duration: 0 } : LIQUID,
       }}
       // ---- vertical drag (custom pointer implementation) ----
       // We own the whole gesture: pointer delta -> yMV (clamped live), drop ->
