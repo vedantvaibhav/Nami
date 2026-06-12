@@ -16,6 +16,7 @@ import {
   VELOCITY_DECAY,
   VELOCITY_LERP,
   clamp,
+  hashString,
   lerp,
   generateChunkPlanes,
   getChunkUpdateThrottleMs,
@@ -31,12 +32,7 @@ const loader = new THREE.TextureLoader()
 // entrance instead of textures popping in whenever they happen to load.
 let introStart = null // perf.now() when the reveal began; null = not yet
 const INTRO_MS = 520
-const introDelayFor = (id) => {
-  const s = String(id)
-  let h = 0
-  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0
-  return (Math.abs(h) % 10) * 70 // 0..630ms, stable per plane
-}
+const introDelayFor = (id) => (hashString(String(id)) % 10) * 70 // 0..630ms, stable per plane
 
 function getTexture(url, onLoad) {
   const existing = textureCache.get(url)
@@ -61,7 +57,7 @@ function getTexture(url, onLoad) {
 function MediaPlane({ position, scale, item, chunkCx, chunkCy, chunkCz, cameraGridRef, onOpen, introDelay = 0 }) {
   const meshRef = useRef(null)
   const materialRef = useRef(null)
-  const localState = useRef({ opacity: 0, frame: 0, introScaled: false })
+  const localState = useRef({ opacity: 0, frame: 0, introScaled: false, introDone: false })
   const [texture, setTexture] = useState(null)
 
   useFrame(() => {
@@ -71,29 +67,33 @@ function MediaPlane({ position, scale, item, chunkCx, chunkCy, chunkCz, cameraGr
     if (!material || !mesh) return
 
     // ---- boot reveal gate: hold invisible, then ease in (staggered) ----
+    // once done, skip the clock read + easing math forever (hot path)
     let introEase = 1
-    if (introStart === null) introEase = 0
-    else {
-      const t = (performance.now() - introStart - introDelay) / INTRO_MS
-      introEase = t >= 1 ? 1 : t <= 0 ? 0 : 1 - Math.pow(1 - t, 3) // easeOutCubic
-    }
-    if (introEase <= 0) {
-      material.opacity = 0
-      material.depthWrite = false
-      mesh.visible = false
-      return
-    }
-    if (introEase < 1) {
-      const f = 0.94 + 0.06 * introEase // gentle scale-in with the fade
-      mesh.scale.set(displayScale.x * f, displayScale.y * f, displayScale.z)
-      state.introScaled = true
-    } else if (state.introScaled) {
-      mesh.scale.copy(displayScale)
-      state.introScaled = false
+    if (!state.introDone) {
+      if (introStart === null) introEase = 0
+      else {
+        const t = (performance.now() - introStart - introDelay) / INTRO_MS
+        introEase = t >= 1 ? 1 : t <= 0 ? 0 : 1 - Math.pow(1 - t, 3) // easeOutCubic
+        if (t >= 1) state.introDone = true
+      }
+      if (introEase <= 0) {
+        material.opacity = 0
+        material.depthWrite = false
+        mesh.visible = false
+        return
+      }
+      if (introEase < 1) {
+        const f = 0.94 + 0.06 * introEase // gentle scale-in with the fade
+        mesh.scale.set(displayScale.x * f, displayScale.y * f, displayScale.z)
+        state.introScaled = true
+      } else if (state.introScaled) {
+        mesh.scale.copy(displayScale)
+        state.introScaled = false
+      }
     }
 
     state.frame = (state.frame + 1) & 1
-    if (state.opacity < INVIS_THRESHOLD && !mesh.visible && state.frame === 0 && introEase >= 1) return
+    if (state.opacity < INVIS_THRESHOLD && !mesh.visible && state.frame === 0 && state.introDone) return
 
     const cam = cameraGridRef.current
     const dist = Math.max(Math.abs(chunkCx - cam.cx), Math.abs(chunkCy - cam.cy), Math.abs(chunkCz - cam.cz))

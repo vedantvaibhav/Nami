@@ -147,8 +147,9 @@ state, so manual layouts work after reload.
 **Persistence.** Manual Y is stored on the memory as **`m.pos = { days?, months? }`** (a memory
 sits in both a Days column and a Months column at independent positions). It rides the existing
 debounced `saveMemories` autosave, so it survives reload. Cards WITHOUT a `pos` in a manual
-column (newly added) stack below the lowest placed card; that fallback top is **pinned per
-(view, card)** (`fallbackTops` ref) so it can't drift on unrelated renders.
+column (newly added) stack below the lowest placed card; that fallback top is **committed into
+`pos[view]` by an effect right after the render that computed it** (`pendingSeeds`), so there is
+ONE positioning mechanism and the placement persists like any dragged position.
 
 **The drag is a CUSTOM pointer implementation** (`startDrag/moveDrag/endDrag/cancelDrag` in
 `MemoryCard.jsx`) — framer's drag system fought the settle (its constraint snap-back is an
@@ -160,10 +161,11 @@ is `flushSync`ed and `yMV` slides to 0 (`CARD_SETTLE`, a 0.13s tween — cannot 
 `onPointerCancel` and unmount-mid-drag **revert** via `cancelCardDrag` (never commit, never
 leak `dragActive`). Drop = silent `navigator.vibrate` tick. **No UI sounds anywhere.**
 
-**Always on-screen.** `visibleHeight = window.innerHeight - (MARKER_H+20) - DOCK_CLEARANCE(96)`,
-recomputed from live viewport height (`vh` state). `dragBounds` enforce the band during the
-drag; `commitDrag` clamps at drop. Committed positions are NOT re-clamped at render (that
-collapsed tall columns).
+**Always on-screen.** The band a card may occupy is `[0, visible - cardHeight]` where
+`visible = window.innerHeight - COL_TOP - DOCK_CLEARANCE(96)`, read LIVE at gesture time
+(`maxTopFor` / `getDragBounds` — no viewport-height state, so resizes don't re-render the card
+tree). Bounds are computed once per gesture at the drag threshold; `commitDrag` clamps at drop.
+Committed positions are NOT re-clamped at render (that collapsed tall columns).
 
 **Layout animation integration.** ALL cards (auto AND manual) carry `layoutId={m.id}` +
 `layout="position"` — manual columns glide on view toggles like everyone else. Renders that

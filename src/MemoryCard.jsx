@@ -1,7 +1,8 @@
-import { forwardRef, useEffect, useRef, useState } from 'react'
+import { forwardRef, memo, useEffect, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
 import { COLORS, imageURL } from './store.js'
 import { icons, inferType, seededBars, seededTilt, seedFrac, videoThumb } from './media.js'
+import { SWIFT } from './anim.js'
 
 export function useImage(imgId) {
   const [url, setUrl] = useState(null)
@@ -127,7 +128,9 @@ const MemoryCard = forwardRef(function MemoryCard({
   // the source of the drop bounce and the glitchy feel.
   // `instantLayout` is true for renders that belong to a drag (App's dragActive
   // ref): the layout transition snaps so projection can't fight the gesture.
-  manual = false, manualY = 0, yMV, dragBounds = null, instantLayout = false,
+  // `getDragBounds(id)` is called once per gesture (at the drag threshold) so
+  // no per-render DOM reads are needed to keep the drag clamped on-screen.
+  manual = false, manualY = 0, yMV, getDragBounds, instantLayout = false,
   onDragStart, onDragEnd, onDragCancel,
   onDelete, onOpen,
 }, ref) {
@@ -159,9 +162,11 @@ const MemoryCard = forwardRef(function MemoryCard({
       // flips the column to manual SYNCHRONOUSLY (App uses flushSync), so this
       // card is absolute + bound to yMV before the first offset is written
       onDragStart?.(m.id)
+      // clamp bounds for the whole gesture, computed once after the flip
+      s.bounds = getDragBounds?.(m.id) ?? null
     }
     // clamp live so the card physically can't leave the visible band
-    const b = dragBounds
+    const b = s.bounds
     yMV.set(b ? Math.min(Math.max(dy, b.top), b.bottom) : dy)
   }
   const endDrag = (e) => {
@@ -172,7 +177,7 @@ const MemoryCard = forwardRef(function MemoryCard({
     try { s.el.releasePointerCapture(s.pointerId) } catch { /* already released */ }
     const el = s.el
     setTimeout(() => { el.style.zIndex = '' }, 200) // after the settle finishes
-    onDragEnd?.(m.id, { offset: { y: yMV.get() } })
+    onDragEnd?.(m.id, yMV.get())
   }
   // the browser stole the pointer (touch became a scroll, system gesture) —
   // REVERT the drag instead of committing wherever the card happened to be
@@ -195,20 +200,18 @@ const MemoryCard = forwardRef(function MemoryCard({
   const f = seedFrac(m.id + ':y')
   const scatter = index === 0 && f >= 0.7 ? Math.round(140 + f * 120) : 0
 
-  // base (auto) inline style — flex stack with the scatter margin. We do NOT put
-  // `yMV` here: in auto mode `layout="position"` (the toggle glide) owns the
-  // transform, and mixing an explicit `y` motion value with `layout` fights it.
-  // The first drag's flip to manual happens SYNCHRONOUSLY (flushSync in App)
-  // inside the pointermove that crosses the threshold, before any offset is
-  // written — so the card is already absolute + yMV-bound when it starts moving.
-  const autoStyle = isQuote
-    ? { marginTop: scatter }
-    : { marginTop: scatter, background: color.bg }
-  // manual inline style — absolutely positioned at the committed `manualY`; `yMV`
-  // is the transient drag offset on top of it (0 at rest).
-  const manualStyle = isQuote
-    ? { position: 'absolute', top: manualY, left: 0, width: '100%', y: yMV }
-    : { position: 'absolute', top: manualY, left: 0, width: '100%', background: color.bg, y: yMV }
+  // inline style, composed from two orthogonal flags:
+  // - quotes have no pastel background (the highlight strips carry the colour)
+  // - AUTO: flex stack + scatter margin, NO `yMV` (layout="position" owns the
+  //   transform in auto mode; the flip to manual happens synchronously inside
+  //   the threshold-crossing pointermove, before any offset is written)
+  // - MANUAL: absolute at the committed `manualY` + the transient `yMV` offset
+  const style = {
+    ...(isQuote ? {} : { background: color.bg }),
+    ...(manual
+      ? { position: 'absolute', top: manualY, left: 0, width: '100%', y: yMV }
+      : { marginTop: scatter }),
+  }
 
   return (
     <motion.div
@@ -223,7 +226,7 @@ const MemoryCard = forwardRef(function MemoryCard({
       layoutId={m.id}
       layout="position"
       className={`card ${isQuote ? 'card-quote' : ''} ${manual ? 'card-manual' : ''}`}
-      style={manual ? manualStyle : autoStyle}
+      style={style}
       // fade in only on the first load; on toggle re-mounts start visible so the
       // card just glides (no opacity flicker).
       initial={entered ? false : { opacity: 0 }}
@@ -233,7 +236,7 @@ const MemoryCard = forwardRef(function MemoryCard({
         // gesture transforms (whileHover / whileTap scale, shadow) settle on a
         // quick tween — NO spring, so releasing a press never bounces the card
         default: { type: 'tween', duration: 0.14, ease: 'easeOut' },
-        opacity: { duration: 0.34, ease: [0.16, 1, 0.3, 1], delay: Math.min(index, 6) * 0.04 },
+        opacity: { duration: 0.34, ease: SWIFT, delay: Math.min(index, 6) * 0.04 },
         // the toggle glide — quicker and critically damped (no float, no wobble);
         // instant during drag-owned renders (see instantLayout above)
         layout: instantLayout ? { duration: 0 } : { type: 'spring', stiffness: 170, damping: 26, mass: 1 },
@@ -291,4 +294,7 @@ const MemoryCard = forwardRef(function MemoryCard({
   )
 })
 
-export default MemoryCard
+// memoized: App re-renders often (boot ticks, resize, dock morph) and every
+// drag-relevant prop is either stable (callbacks, yMV, ref) or a primitive,
+// so untouched cards skip re-rendering entirely
+export default memo(MemoryCard)
