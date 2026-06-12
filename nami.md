@@ -135,6 +135,12 @@ load). A slow storage read can't strand it. On `booted`: overlay fades, the view
 dissolves in from above, orbit planes **stagger in** (module `introStart` + per-plane
 seeded delay in `InfiniteMemoryCanvas`), and the dock rises from the bottom edge.
 
+**Orbit texture build is cached per memory** (`itemCache` in `textures.js`, keyed by
+content). Any `memories` change re-runs `buildMediaItems`, but only NEW/edited memories
+decode/paint — surviving ones are reused and deleted ones evicted. Without this, deleting
+ONE card re-decoded EVERY photo's full-resolution bitmap, and a few rapid deletes of real
+(multi-MB) photos OOM-crashed the renderer. Do NOT remove the cache or key it on `pos`.
+
 ---
 
 ## Manual card placement (vertical drag)
