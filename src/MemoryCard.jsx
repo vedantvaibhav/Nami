@@ -125,8 +125,10 @@ const MemoryCard = forwardRef(function MemoryCard({
   // pointer implementation — framer's drag system fought our settle animation
   // (its constraint snap-back is an uncontrollable bouncy inertia), which was
   // the source of the drop bounce and the glitchy feel.
-  manual = false, manualY = 0, yMV, dragBounds = null,
-  onDragStart, onDragEnd,
+  // `instantLayout` is true for renders that belong to a drag (App's dragActive
+  // ref): the layout transition snaps so projection can't fight the gesture.
+  manual = false, manualY = 0, yMV, dragBounds = null, instantLayout = false,
+  onDragStart, onDragEnd, onDragCancel,
   onDelete, onOpen,
 }, ref) {
   const type = inferType(m)
@@ -172,6 +174,20 @@ const MemoryCard = forwardRef(function MemoryCard({
     setTimeout(() => { el.style.zIndex = '' }, 200) // after the settle finishes
     onDragEnd?.(m.id, { offset: { y: yMV.get() } })
   }
+  // the browser stole the pointer (touch became a scroll, system gesture) —
+  // REVERT the drag instead of committing wherever the card happened to be
+  const cancelDrag = () => {
+    const s = gestureRef.current
+    gestureRef.current = null
+    if (!s?.moved) return
+    try { s.el.releasePointerCapture(s.pointerId) } catch { /* already released */ }
+    s.el.style.zIndex = ''
+    onDragCancel?.(m.id)
+  }
+  // unmount safety: if the card is removed mid-drag (deleted, column regroup)
+  // the gesture can never end — without this, App's dragActive ref would stay
+  // true forever and force-snap every layout animation in the app
+  useEffect(() => () => { if (gestureRef.current?.moved) onDragCancel?.(m.id) }, [])
 
   // placement (AUTO mode only): most columns start at the top; an occasional
   // first card (~30%) sits noticeably lower so the wall feels hand-arranged.
@@ -189,7 +205,7 @@ const MemoryCard = forwardRef(function MemoryCard({
     ? { marginTop: scatter }
     : { marginTop: scatter, background: color.bg }
   // manual inline style — absolutely positioned at the committed `manualY`; `yMV`
-  // is the transient drag offset on top of it (0 at rest). `layout` is OFF here.
+  // is the transient drag offset on top of it (0 at rest).
   const manualStyle = isQuote
     ? { position: 'absolute', top: manualY, left: 0, width: '100%', y: yMV }
     : { position: 'absolute', top: manualY, left: 0, width: '100%', background: color.bg, y: yMV }
@@ -199,11 +215,13 @@ const MemoryCard = forwardRef(function MemoryCard({
       ref={ref}
       // Toggle glide (Days↔Months): shared-layout flight via layoutId +
       // layout="position" => animate ONLY the move, never the size (otherwise the
-      // card balloons in height while images re-measure mid-transition). DISABLED
-      // in manual mode — the absolute `top` + `y` transform is the source of
-      // truth and a shared-layout transform would fight the drag/clamp.
-      layoutId={manual ? undefined : m.id}
-      layout={manual ? false : 'position'}
+      // card balloons in height while images re-measure mid-transition).
+      // Enabled for MANUAL cards too — so hand-arranged columns glide on view
+      // toggles like everyone else. Renders that belong to a drag set
+      // `instantLayout`, which makes the layout transition snap (duration 0) so
+      // projection never animates against the pointer or the drop compensation.
+      layoutId={m.id}
+      layout="position"
       className={`card ${isQuote ? 'card-quote' : ''} ${manual ? 'card-manual' : ''}`}
       style={manual ? manualStyle : autoStyle}
       // fade in only on the first load; on toggle re-mounts start visible so the
@@ -216,8 +234,9 @@ const MemoryCard = forwardRef(function MemoryCard({
         // quick tween — NO spring, so releasing a press never bounces the card
         default: { type: 'tween', duration: 0.14, ease: 'easeOut' },
         opacity: { duration: 0.34, ease: [0.16, 1, 0.3, 1], delay: Math.min(index, 6) * 0.04 },
-        // the toggle glide — quicker and critically damped (no float, no wobble)
-        layout: { type: 'spring', stiffness: 170, damping: 26, mass: 1 },
+        // the toggle glide — quicker and critically damped (no float, no wobble);
+        // instant during drag-owned renders (see instantLayout above)
+        layout: instantLayout ? { duration: 0 } : { type: 'spring', stiffness: 170, damping: 26, mass: 1 },
       }}
       // ---- vertical drag (custom pointer implementation) ----
       // We own the whole gesture: pointer delta -> yMV (clamped live), drop ->
@@ -226,7 +245,7 @@ const MemoryCard = forwardRef(function MemoryCard({
       onPointerDown={startDrag}
       onPointerMove={moveDrag}
       onPointerUp={endDrag}
-      onPointerCancel={endDrag}
+      onPointerCancel={cancelDrag}
       // lift on press (covers the whole drag too — tap has gesture priority)
       whileTap={{ scale: 1.02, boxShadow: '0 6px 16px rgba(20,20,40,0.12)' }}
       whileHover={{ scale: 0.98 }}

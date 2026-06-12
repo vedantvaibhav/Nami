@@ -136,17 +136,24 @@ async function photoItem(m) {
   return { url: rounded, ...dims }
 }
 
-export async function buildMediaItems(memories) {
+export async function buildMediaItems(memories, onProgress) {
   await document.fonts.ready // Newsreader must be loaded before painting quotes
   const items = []
-  for (const m of memories) {
-    if (m.draft) continue
-    const type = inferType(m)
-    let item = null
-    if (type === 'photo') item = await photoItem(m)
-    else if (type === 'quote') item = paintQuote(m)
-    else item = paintNote(m) // notes, video, audio → painted card
-    if (item) items.push({ ...item, memory: m })
+  const list = memories.filter((m) => !m.draft)
+  let done = 0
+  onProgress?.(0, list.length)
+  for (const m of list) {
+    // one corrupt blob must never hang the whole boot — skip the item instead
+    try {
+      const type = inferType(m)
+      let item = null
+      if (type === 'photo') item = await photoItem(m)
+      else if (type === 'quote') item = paintQuote(m)
+      else item = paintNote(m) // notes, video, audio → painted card
+      if (item) items.push({ ...item, memory: m })
+    } catch { /* skip unreadable memory */ }
+    done += 1
+    onProgress?.(done, list.length)
   }
   return items
 }

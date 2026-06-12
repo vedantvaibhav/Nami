@@ -25,6 +25,19 @@ const PLANE_GEOMETRY = new THREE.PlaneGeometry(1, 1)
 const textureCache = new Map()
 const loader = new THREE.TextureLoader()
 
+// ---- boot reveal -----------------------------------------------------------
+// Planes stay invisible until the app's boot overlay lifts (`revealed` prop),
+// then fade + scale in with a small per-plane stagger — a calm, deliberate
+// entrance instead of textures popping in whenever they happen to load.
+let introStart = null // perf.now() when the reveal began; null = not yet
+const INTRO_MS = 520
+const introDelayFor = (id) => {
+  const s = String(id)
+  let h = 0
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0
+  return (Math.abs(h) % 10) * 70 // 0..630ms, stable per plane
+}
+
 function getTexture(url, onLoad) {
   const existing = textureCache.get(url)
   if (existing) {
@@ -45,10 +58,10 @@ function getTexture(url, onLoad) {
   return texture
 }
 
-function MediaPlane({ position, scale, item, chunkCx, chunkCy, chunkCz, cameraGridRef, onOpen }) {
+function MediaPlane({ position, scale, item, chunkCx, chunkCy, chunkCz, cameraGridRef, onOpen, introDelay = 0 }) {
   const meshRef = useRef(null)
   const materialRef = useRef(null)
-  const localState = useRef({ opacity: 0, frame: 0 })
+  const localState = useRef({ opacity: 0, frame: 0, introScaled: false })
   const [texture, setTexture] = useState(null)
 
   useFrame(() => {
@@ -57,8 +70,30 @@ function MediaPlane({ position, scale, item, chunkCx, chunkCy, chunkCz, cameraGr
     const state = localState.current
     if (!material || !mesh) return
 
+    // ---- boot reveal gate: hold invisible, then ease in (staggered) ----
+    let introEase = 1
+    if (introStart === null) introEase = 0
+    else {
+      const t = (performance.now() - introStart - introDelay) / INTRO_MS
+      introEase = t >= 1 ? 1 : t <= 0 ? 0 : 1 - Math.pow(1 - t, 3) // easeOutCubic
+    }
+    if (introEase <= 0) {
+      material.opacity = 0
+      material.depthWrite = false
+      mesh.visible = false
+      return
+    }
+    if (introEase < 1) {
+      const f = 0.94 + 0.06 * introEase // gentle scale-in with the fade
+      mesh.scale.set(displayScale.x * f, displayScale.y * f, displayScale.z)
+      state.introScaled = true
+    } else if (state.introScaled) {
+      mesh.scale.copy(displayScale)
+      state.introScaled = false
+    }
+
     state.frame = (state.frame + 1) & 1
-    if (state.opacity < INVIS_THRESHOLD && !mesh.visible && state.frame === 0) return
+    if (state.opacity < INVIS_THRESHOLD && !mesh.visible && state.frame === 0 && introEase >= 1) return
 
     const cam = cameraGridRef.current
     const dist = Math.max(Math.abs(chunkCx - cam.cx), Math.abs(chunkCy - cam.cy), Math.abs(chunkCz - cam.cz))
@@ -79,7 +114,7 @@ function MediaPlane({ position, scale, item, chunkCx, chunkCy, chunkCz, cameraGr
         ? 1
         : Math.max(0, 1 - (absDepth - DEPTH_FADE_START) / Math.max(DEPTH_FADE_END - DEPTH_FADE_START, 0.0001))
 
-    const target = Math.min(gridFade, depthFade * depthFade)
+    const target = Math.min(gridFade, depthFade * depthFade) * introEase
     state.opacity = target < INVIS_THRESHOLD && state.opacity < INVIS_THRESHOLD ? 0 : lerp(state.opacity, target, 0.18)
 
     const isFullyOpaque = state.opacity > 0.99
@@ -159,6 +194,7 @@ function Chunk({ cx, cy, cz, media, cameraGridRef, onOpen }) {
             chunkCz={cz}
             cameraGridRef={cameraGridRef}
             onOpen={onOpen}
+            introDelay={introDelayFor(plane.id)}
           />
         )
       })}
@@ -338,8 +374,14 @@ function SceneController({ media, onOpen }) {
   ))
 }
 
-export default function InfiniteMemoryCanvas({ media, active = true, onOpen }) {
+export default function InfiniteMemoryCanvas({ media, active = true, revealed = true, onOpen }) {
   const dpr = Math.min(window.devicePixelRatio || 1, 1.5)
+
+  // start the staggered plane reveal the moment the boot overlay lifts
+  useEffect(() => {
+    if (revealed && introStart === null) introStart = performance.now()
+  }, [revealed])
+
   if (!media.length) return null
 
   return (

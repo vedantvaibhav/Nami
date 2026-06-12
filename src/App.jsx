@@ -12,9 +12,9 @@ import { ZOOMS, markerLabel, toISO, fromISO, unitStart } from './time.js'
 const MARKER_H = 130 // px reserved at top for date markers
 // The zoom-pill morph — snappy but still liquid, critically damped (no wobble)
 const LIQUID = { type: 'spring', stiffness: 230, damping: 30, mass: 1 }
-// The dock morph — each direction tuned separately
-const SHELL_OPEN = { type: 'spring', stiffness: 250, damping: 30, mass: 1 }      // lively, settles a bit quicker
-const SHELL_CLOSE = { type: 'spring', stiffness: 190, damping: 32, mass: 1.05 }  // slow, liquid settle
+// The dock morph — crisp, physical, essentially critically damped (no double-bounce)
+const SHELL_OPEN = { type: 'spring', stiffness: 380, damping: 38, mass: 1 }
+const SHELL_CLOSE = { type: 'spring', stiffness: 320, damping: 36, mass: 1 }
 
 // A card is worth keeping if it has a title, body, or any media
 const isEmpty = (m) => !m.title?.trim() && !m.body?.trim() && !(m.media?.length)
@@ -27,8 +27,8 @@ const VIEW_SWAP = {
   scale: { duration: 0.5, ease: SWIFT },
   opacity: { duration: 0.3, ease: 'easeOut' },
 }
-// one-time entrance for the whole stack on first load
-const APP_ENTER = { duration: 0.6, ease: SWIFT }
+// one-time entrance for the whole stack after boot — calm and deliberate
+const APP_ENTER = { duration: 0.9, ease: SWIFT }
 
 const COL_W = 340 // fixed column width — populated dates lay out sequentially
 
@@ -42,30 +42,6 @@ const MIN_GAP = 14                 // minimum gap kept between two cards (matche
 // physically impossible for the drop to bounce.
 const CARD_SETTLE = { type: 'tween', duration: 0.13, ease: [0.25, 1, 0.5, 1] }
 
-// ---- tiny synthesised sound kit (no assets) + haptics -------------------
-let _audioCtx = null
-function blip(f0, f1, dur, vol) {
-  try {
-    _audioCtx = _audioCtx || new (window.AudioContext || window.webkitAudioContext)()
-    const ctx = _audioCtx
-    if (ctx.state === 'suspended') ctx.resume()
-    const t = ctx.currentTime
-    const osc = ctx.createOscillator()
-    const gain = ctx.createGain()
-    osc.type = 'sine'
-    osc.frequency.setValueAtTime(f0, t)
-    osc.frequency.exponentialRampToValueAtTime(f1, t + dur * 0.7)
-    gain.gain.setValueAtTime(0.0001, t)
-    gain.gain.exponentialRampToValueAtTime(vol, t + 0.006)
-    gain.gain.exponentialRampToValueAtTime(0.0001, t + dur)
-    osc.connect(gain); gain.connect(ctx.destination)
-    osc.start(t); osc.stop(t + dur + 0.02)
-  } catch { /* audio unavailable — silent */ }
-}
-const playPick = () => blip(440, 560, 0.05, 0.025)                                 // picking a card up
-const playDrop = () => { blip(220, 140, 0.09, 0.05); navigator.vibrate?.(8) }      // dropping it
-const playZoom = () => { blip(300, 440, 0.1, 0.04); navigator.vibrate?.(6) }       // changing Days/Months/Years
-
 export default function App() {
   const [memories, setMemories] = useState(null)
   const [zoomIdx, setZoomIdx] = useState(2) // open in Years view on load
@@ -75,15 +51,32 @@ export default function App() {
   const [entered, setEntered] = useState(false) // true after the load entrance — gates the card fade-in so toggles don't re-flicker
   const toolbarRef = useRef(null)
   const composerRef = useRef(null)
-  const sizeMorph = useRef(false) // animate the shell size only during a composer open/close
 
-  // flip `entered` once, shortly after the first load, so cards fade in on the
+  // ---- boot sequence ----------------------------------------------------
+  // White screen + thin grey bar until the orbit's media items are actually
+  // built (the real readiness signal, reported by YearOrbit), THEN the calm
+  // reveal: overlay fades, orbit pictures stagger in, dock rises from below.
+  const [bootPct, setBootPct] = useState(0.08) // a visible sliver immediately
+  const [booted, setBooted] = useState(false)
+  const bootOnce = useRef(false)
+  const onOrbitProgress = useCallback((done, total) => {
+    if (bootOnce.current) return
+    setBootPct((p) => Math.max(p, 0.2 + 0.75 * (total ? done / total : 1)))
+  }, [])
+  const onOrbitReady = useCallback(() => {
+    if (bootOnce.current) return
+    bootOnce.current = true
+    setBootPct(1)
+    setTimeout(() => setBooted(true), 240) // let the bar visibly reach 100%
+  }, [])
+
+  // flip `entered` once, shortly after the reveal, so cards fade in on the
   // initial entrance but NOT on later re-mounts (e.g. Days<->Months toggles)
   useEffect(() => {
-    if (!memories || entered) return
-    const t = setTimeout(() => setEntered(true), 750)
+    if (!booted || entered) return
+    const t = setTimeout(() => setEntered(true), 900)
     return () => clearTimeout(t)
-  }, [memories, entered])
+  }, [booted, entered])
   const [dockDims, setDockDims] = useState({ toolbarW: 462, composerH: 450 })
   const scrollRef = useRef(null)
 
@@ -100,6 +93,13 @@ export default function App() {
   }, [])
   // m.id -> MotionValue for the transient vertical drag offset (see cardYMV)
   const yMVs = useRef(new Map())
+  // true from drag start until the drop commit ends — renders during a drag
+  // use INSTANT layout so projection never fights the gesture
+  const dragActive = useRef(false)
+  // pinned fallback tops for cards WITHOUT a saved pos in a manual column —
+  // computed once per (view, card) so they can't drift on unrelated renders
+  // (live offsetHeight reads change as images decode)
+  const fallbackTops = useRef(new Map()) // `${view}:${id}` -> top
 
   const zoom = ZOOMS[zoomIdx]
   const isYears = zoom.id === 'years'
@@ -109,6 +109,24 @@ export default function App() {
   // fresh before any same-pass layout work reads it.
   const zoomIdRef = useRef(zoom.id)
   useLayoutEffect(() => { zoomIdRef.current = zoom.id }, [zoom.id])
+
+  // THE 2D layout view. While in Years the timeline keeps the LAST 2D grouping
+  // (days|months) instead of regrouping to year-columns — regrouping the hidden
+  // layer mid-crossfade sent every layoutId card flying into a one-column pile
+  // while the layer faded (the months<->years card glitch). Frozen layout =>
+  // nothing moves in the 2D layer during the orbit crossfade, ever.
+  const lastView2d = useRef('months')
+  if (!isYears && lastView2d.current !== zoom.id) lastView2d.current = zoom.id
+  const view2d = isYears ? lastView2d.current : zoom.id
+
+  // While leaving Years the orbit must keep rendering through its fade-out —
+  // flipping frameloop to 'never' instantly froze it on frame one of the fade.
+  const [orbitLive, setOrbitLive] = useState(true)
+  useEffect(() => {
+    if (isYears) { setOrbitLive(true); return }
+    const t = setTimeout(() => setOrbitLive(false), 600) // pause AFTER the crossfade ends
+    return () => clearTimeout(t)
+  }, [isYears])
 
   // ---- load / persist -------------------------------------------------
   useEffect(() => {
@@ -123,6 +141,11 @@ export default function App() {
             : { ...m, media: m.imgId ? [{ id: m.imgId, kind: 'image', name: 'image' }] : [] }
         )
       )
+      setBootPct((p) => Math.max(p, 0.18)) // storage read done
+    }).catch(() => {
+      // a failed storage read must not strand the loading bar — boot empty
+      setMemories([])
+      setBootPct((p) => Math.max(p, 0.18))
     })
   }, [])
 
@@ -144,13 +167,13 @@ export default function App() {
     if (!memories) return []
     const groups = new Map()
     for (const m of memories) {
-      const k = unitStart(m.date, zoom.id)
+      const k = unitStart(m.date, view2d)
       if (!groups.has(k)) groups.set(k, [])
       groups.get(k).push(m)
     }
 
     let keys
-    if (zoom.id === 'months') {
+    if (view2d === 'months') {
       const today = new Date()
       let earliestYear = today.getFullYear()
       for (const m of memories) earliestYear = Math.min(earliestYear, fromISO(m.date).getFullYear())
@@ -167,7 +190,7 @@ export default function App() {
       const items = (groups.get(k) || []).slice().sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0))
       return { key: k, colX: i * COL_W, colW: COL_W, items }
     })
-  }, [memories, zoom.id])
+  }, [memories, view2d])
 
   const widthPx = Math.max(columns.length * COL_W, 1)
 
@@ -203,44 +226,59 @@ export default function App() {
 
   const zoomMorphing = useRef(false)
   const morphAnim = useRef(null)
+  // set by scroll/resize events; the in-flight morph only re-reads layout when
+  // this is dirty (a forced reflow per frame would drop frames mid-switch)
+  const thumbDirty = useRef(false)
 
   const syncThumb = useCallback((smooth = false) => {
     // in the orbit (Years) view the pill fills the whole track — the scroller
     // is still mounted (hidden layer), so gate on the zoom, not on the ref
-    const el = zoomIdRef.current === 'years' ? null : scrollRef.current
-    const frac = el ? el.clientWidth / el.scrollWidth : 1
-    const w = Math.max(64, Math.min(TRACK_W, Math.round(TRACK_W * frac)))
-    thumbWTarget.current = w
-    const maxScroll = el ? el.scrollWidth - el.clientWidth : 0
-    const p = el && maxScroll > 0 ? el.scrollLeft / maxScroll : 0
-    const target = p * (TRACK_W - w)
+    const read = () => {
+      const el = zoomIdRef.current === 'years' ? null : scrollRef.current
+      const frac = el ? el.clientWidth / el.scrollWidth : 1
+      const w = Math.max(64, Math.min(TRACK_W, Math.round(TRACK_W * frac)))
+      const maxScroll = el ? el.scrollWidth - el.clientWidth : 0
+      const p = el && maxScroll > 0 ? el.scrollLeft / maxScroll : 0
+      return { w, x: p * (TRACK_W - w) }
+    }
+    const t = read()
+    thumbWTarget.current = t.w
     if (smooth) {
       // ONE animation drives both width and position, interpolating the
       // pill as a single shape — x + width stays bounded by construction,
-      // so the pill physically cannot leave the track mid-morph
+      // so the pill physically cannot leave the track mid-morph.
       zoomMorphing.current = true
       morphAnim.current?.stop() // retarget cleanly if a morph is already in flight
       const from = { x: thumbX.get(), w: thumbWmv.get() }
+      let live = t
+      thumbDirty.current = false
       morphAnim.current = animate(0, 1, {
         ...LIQUID,
         onUpdate: (p) => {
-          thumbX.set(from.x + (target - from.x) * p)
-          thumbWmv.set(from.w + (w - from.w) * p)
+          // the target retargets continuously when scrolling happens during the
+          // morph (the programmatic restore, or the user) — but layout is only
+          // re-read when a scroll/resize actually fired (no per-frame reflow)
+          if (thumbDirty.current) {
+            live = read()
+            thumbDirty.current = false
+            thumbWTarget.current = live.w
+          }
+          thumbX.set(from.x + (live.x - from.x) * p)
+          thumbWmv.set(from.w + (live.w - from.w) * p)
         },
         onComplete: () => { zoomMorphing.current = false },
       })
     } else if (!zoomMorphing.current) {
-      // don't stomp an in-flight zoom morph — the scroll restore fires
-      // a native scroll event that would otherwise snap the pill
-      thumbWmv.set(w)
-      thumbX.set(target)
+      // don't stomp an in-flight zoom morph — it re-reads the target itself
+      thumbWmv.set(t.w)
+      thumbX.set(t.x)
     }
-  }, [thumbX, thumbWmv])
+  }, [thumbX, thumbWmv, TRACK_W])
 
   useEffect(() => {
     const el = scrollRef.current
     if (!el) return
-    const onScroll = () => syncThumb()
+    const onScroll = () => { thumbDirty.current = true; syncThumb() }
     el.addEventListener('scroll', onScroll, { passive: true })
     window.addEventListener('resize', onScroll)
     return () => {
@@ -286,7 +324,6 @@ export default function App() {
       const maxScroll = el.scrollWidth - el.clientWidth
       pendingCenter.current = maxScroll > 0 ? el.scrollLeft / maxScroll : 0
     }
-    playZoom()
     setZoomIdx(idx)
   }
 
@@ -313,7 +350,7 @@ export default function App() {
   }, [])
 
   // ---- manual placement helpers ----------------------------------------
-  const view = zoom.id // 'days' | 'months' (drag is a 2D-timeline feature only)
+  const view = view2d // 'days' | 'months' (drag is a 2D-timeline feature only)
   // A column is MANUAL for this view when any of its cards already has a saved
   // pos[view]. Deriving this from the data (not local state) means manual
   // layouts persist across reloads — the saved positions are actually used.
@@ -348,7 +385,10 @@ export default function App() {
   // CURRENT offsetTop and all become absolutely placed before the first drag
   // offset is written — nothing reflows, the card stays under the cursor.
   const onCardDragStart = useCallback((id, items) => {
-    playPick()
+    // from here until the drop commit finishes, every render belongs to the
+    // drag: layout animations are forced INSTANT so framer's projection can't
+    // fight the pointer (yMV) or the drop compensation
+    dragActive.current = true
     if (isManualCol(items.list)) return // already manual — nothing to flip/seed
     flushSync(() => setMemories((ms) =>
       ms.map((m) => {
@@ -419,8 +459,18 @@ export default function App() {
     flushSync(() => setMemories((ms) => ms.map((m) => (m.id === id ? { ...m, pos: { ...(m.pos || {}), [view]: y } } : m))))
     mv.set(raw - y)
     animate(mv, 0, CARD_SETTLE)
-    playDrop()
+    navigator.vibrate?.(8) // silent haptic tick on supported devices — no audio
+    dragActive.current = false
   }, [view, visibleHeight, memories, cardYMV])
+
+  // drag aborted (pointer stolen by a scroll/system gesture, or the card
+  // unmounted mid-drag): revert the offset, release the drag flag. Without
+  // this, dragActive leaked true and force-snapped every layout animation.
+  const cancelCardDrag = useCallback((id) => {
+    dragActive.current = false
+    const mv = yMVs.current.get(id)
+    if (mv) animate(mv, 0, CARD_SETTLE)
+  }, [])
 
   // completely random pastel from the palette; fixed once assigned
   const nextColor = () => COLOR_KEYS[Math.floor(Math.random() * COLOR_KEYS.length)]
@@ -455,19 +505,33 @@ export default function App() {
       color: nextColor(), // random, fixed — not user-changeable
     }
     setMemories((ms) => [...ms, card])
-    sizeMorph.current = true
+    beginShellMorph()
     setComposerOpen(false)
+  }
+
+  // shellMorph is STATE (not a ref) and is cleared on a timer sized to the
+  // spring settle. The old ref was cleared by onAnimationComplete of whichever
+  // animation finished FIRST (the 0.2s face fade), so any mid-morph re-render
+  // (the ResizeObserver fires during open!) flipped the size transition to
+  // {duration: 0} and snapped the shell mid-flight — the dock glitch.
+  const [shellMorph, setShellMorph] = useState(false)
+  const shellMorphTimer = useRef(null)
+  useEffect(() => () => clearTimeout(shellMorphTimer.current), [])
+  const beginShellMorph = () => {
+    setShellMorph(true)
+    clearTimeout(shellMorphTimer.current)
+    shellMorphTimer.current = setTimeout(() => setShellMorph(false), 700)
   }
 
   const openComposer = () => {
     setOpenId(null)
     setComposerKey((k) => k + 1) // fresh form each open
-    sizeMorph.current = true
+    beginShellMorph()
     setComposerOpen(true)
   }
 
   const closeComposer = () => {
-    sizeMorph.current = true
+    beginShellMorph()
     setComposerOpen(false)
   }
 
@@ -540,7 +604,15 @@ export default function App() {
     return () => window.removeEventListener('paste', onPaste)
   }, [memories])
 
-  if (!memories) return <div className="loading">…</div>
+  if (!memories) {
+    // storage still loading — same white screen + thin grey bar the boot
+    // overlay shows, so the loading state is ONE continuous visual
+    return (
+      <div className="boot-overlay">
+        <div className="boot-track"><div className="boot-fill" style={{ width: `${Math.round(bootPct * 100)}%` }} /></div>
+      </div>
+    )
+  }
 
   const openCard = memories.find((m) => m.id === openId)
 
@@ -548,14 +620,13 @@ export default function App() {
     <div className="viewport" onDragOver={(e) => e.preventDefault()} onDrop={onDrop}>
       {/* Both views stay mounted and cross-fade — remounting the 3D canvas on
           every Months↔Years switch (WebGL context + shaders + textures) was
-          the source of the switch lag. Hidden layer is visibility:hidden and
-          the orbit's frameloop pauses, so it costs nothing while inactive. */}
-      {/* hidden layers stay opacity-0 but PAINTED — flipping visibility forced a
-          full timeline repaint in the same frame the pill morph starts (hitch) */}
+          the source of the switch lag. Hidden layers stay opacity-0 but PAINTED
+          (flipping visibility forced a full repaint in the same frame the pill
+          morph starts), and the orbit's frameloop pauses AFTER its fade ends. */}
       <motion.div
         className="view-stack"
-        initial={{ opacity: 0, y: -26 }}
-        animate={{ opacity: 1, y: 0 }}
+        initial={false}
+        animate={booted ? { opacity: 1, y: 0 } : { opacity: 0, y: -18 }}
         transition={APP_ENTER}
       >
       <motion.div
@@ -564,7 +635,10 @@ export default function App() {
         animate={isYears ? { opacity: 0, scale: 0.985 } : { opacity: 1, scale: 1 }}
         transition={VIEW_SWAP}
       >
-      <div className="scroller" ref={scrollRef}>
+      {/* layoutScroll: framer's projection accounts for this container's scroll
+          offset when measuring layoutId flights — without it the programmatic
+          scrollLeft restore (same commit) shifted every glide's origin/target */}
+      <motion.div className="scroller" ref={scrollRef} layoutScroll>
         <div className="canvas" style={{ width: widthPx }}>
           <div className="topline" />
           {columns.map(({ key, colX }) => {
@@ -573,7 +647,7 @@ export default function App() {
               <div key={`m-${key}`}>
                 <div className="gridline" style={{ left: colX }} />
                 <div className="marker" style={{ left: colX + COL_W / 2 }}>
-                  <div className="marker-day">{markerLabel(d, zoom.id)}</div>
+                  <div className="marker-day">{markerLabel(d, view2d)}</div>
                   <div className="marker-year">{d.getFullYear()}</div>
                 </div>
               </div>
@@ -616,9 +690,18 @@ export default function App() {
                     // (used so the first-drag bounds are correct before the flip).
                     let top
                     if (isManual) {
-                      if (m.pos?.[view] != null) top = m.pos[view]
-                      else {
-                        top = fallbackCursor + MIN_GAP
+                      if (m.pos?.[view] != null) {
+                        top = m.pos[view]
+                      } else {
+                        // pin the computed fallback so this card's top is stable
+                        // across re-renders (heights settle as images decode)
+                        const fk = `${view}:${m.id}`
+                        if (fallbackTops.current.has(fk)) {
+                          top = fallbackTops.current.get(fk)
+                        } else {
+                          top = fallbackCursor + MIN_GAP
+                          fallbackTops.current.set(fk, top)
+                        }
                         fallbackCursor = top + cardHeight(m.id)
                       }
                     } else {
@@ -634,6 +717,7 @@ export default function App() {
                       manual={isManual}
                       manualY={isManual ? top : 0}
                       yMV={cardYMV(m.id)}
+                      instantLayout={dragActive.current}
                       // clamp the drag so the card can never go off-screen or
                       // under the dock. Bounds are on the transient yMV offset,
                       // relative to the card's current top.
@@ -643,6 +727,7 @@ export default function App() {
                       }}
                       onDragStart={() => onCardDragStart(m.id, { key, list: items })}
                       onDragEnd={(id, info) => commitDrag(id, info, items)}
+                      onDragCancel={cancelCardDrag}
                       onDelete={removeMemory}
                       onOpen={setOpenId}
                     />
@@ -654,7 +739,7 @@ export default function App() {
             })}
           </LayoutGroup>
         </div>
-      </div>
+      </motion.div>
       </motion.div>
 
       <motion.div
@@ -663,44 +748,49 @@ export default function App() {
         animate={isYears ? { opacity: 1, scale: 1 } : { opacity: 0, scale: 1.04 }}
         transition={VIEW_SWAP}
       >
-        <YearOrbit memories={memories} active={isYears} />
+        <YearOrbit
+          memories={memories}
+          active={orbitLive}
+          revealed={booted}
+          onProgress={onOrbitProgress}
+          onReady={onOrbitReady}
+        />
       </motion.div>
       </motion.div>
 
       <div className="dock-wrap">
         <motion.div
           className={`dock-shell ${composerOpen ? 'dock-shell-open' : ''}`}
-          initial={{ y: 72, opacity: 0 }}
+          initial={{ y: 84, opacity: 0 }}
           animate={{
-            y: 0,
-            opacity: 1,
+            y: booted ? 0 : 84,
+            opacity: booted ? 1 : 0,
             width: composerOpen ? Math.min(440, vw - 24) : dockDims.toolbarW,
             height: composerOpen ? dockDims.composerH : 48,
           }}
           style={{ borderRadius: 24 }}
           transition={{
-            // entrance: the bar waits for the content to load + the toolbar to
-            // self-measure (so it appears at its final width, no snap), then
-            // rises up slowly from below — y and opacity share one timing
-            y: { duration: 0.7, ease: SWIFT, delay: 0.55 },
-            opacity: { duration: 0.55, ease: 'easeOut', delay: 0.55 },
-            // size only animates during an actual open/close morph; on load /
-            // self-measurement it snaps instantly so the bar just appears
-            width: sizeMorph.current ? (composerOpen ? SHELL_OPEN : SHELL_CLOSE) : { duration: 0 },
-            // height: morph spring during open/close; while open, content changes
-            // (e.g. a photo is added) animate gently instead of jumping
-            height: sizeMorph.current
+            // entrance: tied to the REAL boot signal — rises slowly from the
+            // bottom edge once everything is ready (content reveals first)
+            y: { duration: 1.0, ease: SWIFT, delay: 0.35 },
+            opacity: { duration: 0.7, ease: 'easeOut', delay: 0.35 },
+            // size animates ONLY during an open/close morph (shellMorph state —
+            // survives mid-morph re-renders); otherwise self-measurement snaps.
+            // While open, content growth (adding a photo) animates gently.
+            width: shellMorph ? (composerOpen ? SHELL_OPEN : SHELL_CLOSE) : { duration: 0 },
+            height: shellMorph
               ? (composerOpen ? SHELL_OPEN : SHELL_CLOSE)
-              : (composerOpen ? { type: 'spring', stiffness: 300, damping: 30 } : { duration: 0 }),
+              : (composerOpen ? { type: 'spring', stiffness: 300, damping: 32 } : { duration: 0 }),
           }}
-          onAnimationComplete={() => { sizeMorph.current = false }}
         >
-          {/* toolbar face */}
+          {/* toolbar face — crossfades tightly with the size morph (no dead air) */}
           <motion.div
             ref={toolbarRef}
             className="dock-face zoombar"
             animate={{ opacity: composerOpen ? 0 : 1 }}
-            transition={{ duration: composerOpen ? 0.12 : 0.32, delay: composerOpen ? 0 : 0.16, ease: 'easeOut' }}
+            transition={composerOpen
+              ? { duration: 0.1, ease: 'easeIn' }
+              : { duration: 0.18, ease: 'easeOut', delay: 0.07 }}
             style={{ pointerEvents: composerOpen ? 'none' : 'auto' }}
           >
             <button
@@ -744,7 +834,9 @@ export default function App() {
             ref={composerRef}
             className="dock-face dock-composer"
             animate={{ opacity: composerOpen ? 1 : 0 }}
-            transition={{ duration: composerOpen ? 0.2 : 0.14, delay: composerOpen ? 0.26 : 0, ease: 'easeOut' }}
+            transition={composerOpen
+              ? { duration: 0.18, ease: 'easeOut', delay: 0.07 }
+              : { duration: 0.1, ease: 'easeIn' }}
             style={{ pointerEvents: composerOpen ? 'auto' : 'none' }}
           >
             <Composer
@@ -760,6 +852,21 @@ export default function App() {
 
       <AnimatePresence>
         {openCard && <Lightbox key={openCard.id} m={openCard} onClose={() => setOpenId(null)} />}
+      </AnimatePresence>
+
+      {/* boot overlay: plain white + a thin grey bar, fading out on reveal */}
+      <AnimatePresence>
+        {!booted && (
+          <motion.div
+            className="boot-overlay"
+            initial={false}
+            exit={{ opacity: 0, transition: { duration: 0.5, ease: 'easeOut' } }}
+          >
+            <div className="boot-track">
+              <div className="boot-fill" style={{ width: `${Math.round(bootPct * 100)}%` }} />
+            </div>
+          </motion.div>
+        )}
       </AnimatePresence>
     </div>
   )

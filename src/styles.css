@@ -9,7 +9,21 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-.loading { display: grid; place-items: center; height: 100vh; color: #C7CBD4; font-size: 32px; }
+/* ---- boot: plain white + a thin grey loading bar (no logo, no spinner) ---- */
+.boot-overlay {
+  position: fixed; inset: 0; z-index: 200;
+  background: #FDFDFC;
+  display: grid; place-items: center;
+}
+.boot-track {
+  width: 160px; height: 2px; border-radius: 2px;
+  background: #ECECEA; overflow: hidden;
+}
+.boot-fill {
+  height: 100%; border-radius: 2px;
+  background: #C7C7C2;
+  transition: width 0.25s ease;
+}
 
 .viewport { position: relative; height: 100vh; }
 
