@@ -62,21 +62,17 @@ export default function App() {
   const composerRef = useRef(null)
 
   // ---- boot sequence ----------------------------------------------------
-  // White screen + thin grey bar until the orbit's media items are actually
-  // built (the real readiness signal, reported by YearOrbit), THEN the calm
-  // reveal: overlay fades, orbit pictures stagger in, dock rises from below.
-  const bootMV = useMotionValue(8) // bar % — a visible sliver immediately
+  // Simple fixed loader: white screen + thin grey bar that fills 0→100% over
+  // ~1s, then the Years view is revealed REGARDLESS of whether the orbit
+  // textures finished (the planes stagger-fade in as they load). A slow
+  // storage read can't strand it. Then the calm reveal already wired below:
+  // overlay fades, orbit pictures stagger in, dock rises from the bottom.
+  const bootMV = useMotionValue(0) // bar %
   const [booted, setBooted] = useState(false)
-  const bootOnce = useRef(false)
-  const onOrbitProgress = useCallback((done, total) => {
-    if (bootOnce.current) return
-    bootMV.set(Math.max(bootMV.get(), 20 + 75 * (total ? done / total : 1)))
-  }, [bootMV])
-  const onOrbitReady = useCallback(() => {
-    if (bootOnce.current) return
-    bootOnce.current = true
-    bootMV.set(100)
-    setTimeout(() => setBooted(true), 240) // let the bar visibly reach 100%
+  useEffect(() => {
+    const bar = animate(bootMV, 100, { duration: 1, ease: 'linear' })
+    const t = setTimeout(() => setBooted(true), 1000)
+    return () => { bar.stop(); clearTimeout(t) }
   }, [bootMV])
   const [dockDims, setDockDims] = useState({ toolbarW: 462, composerH: 450 })
   const scrollRef = useRef(null)
@@ -147,11 +143,8 @@ export default function App() {
             : { ...m, media: m.imgId ? [{ id: m.imgId, kind: 'image', name: 'image' }] : [] }
         )
       )
-      bootMV.set(Math.max(bootMV.get(), 18)) // storage read done
     }).catch(() => {
-      // a failed storage read must not strand the loading bar — boot empty
-      setMemories([])
-      bootMV.set(Math.max(bootMV.get(), 18))
+      setMemories([]) // a failed storage read still reveals (empty timeline)
     })
   }, [])
 
@@ -794,8 +787,6 @@ export default function App() {
           memories={memories}
           active={orbitLive}
           revealed={booted}
-          onProgress={onOrbitProgress}
-          onReady={onOrbitReady}
         />
       </motion.div>
       </motion.div>
