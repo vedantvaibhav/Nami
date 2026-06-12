@@ -95,9 +95,10 @@ In `App.jsx`, the `columns` memo turns `memories` into positioned columns:
 
 **Both views are ALWAYS mounted** as stacked `.view-layer`s in `App.jsx` and cross-fade
 on zoom change. This is deliberate: remounting the 3D canvas on every Months↔Years
-switch (WebGL context + shader compile + texture builds) caused visible lag. The hidden
-layer is **opacity-0 but stays painted** (`pointer-events: none`; do NOT flip
-`visibility` — that forces a full repaint in the same frame the pill morph starts).
+switch (WebGL context + shader compile + texture builds) caused visible lag.
+**One unified switch motion**: the zoom-pill morph, the view crossfade, and the
+Days↔Months card glide all run on the shared **`LIQUID`** spring (`anim.js`) / a ~0.42s
+`VIEW_SWAP`, so they land together (~0.4s) instead of three staggered speeds.
 Consequences to respect:
 - `scrollRef` is **never null** anymore — gate orbit-vs-timeline logic on the zoom
   (see `zoomIdRef` used by `syncThumb`, and the `zoom.id === 'years'` check in `onDrop`).
@@ -107,23 +108,32 @@ Consequences to respect:
   the hidden layer mid-crossfade sent every `layoutId` card flying into a one-column
   pile while the layer faded — the months↔years card glitch. All 2D logic (columns memo,
   markers, drag `view`) keys on `view2d`, never `zoom.id`.
-- **The orbit's `frameloop` pauses 600ms AFTER leaving Years** (`orbitLive` state), so it
-  keeps rendering through its own fade-out instead of freezing on frame one.
+- **The inactive layer is `visibility:hidden` once its crossfade COMPLETES** so it stops
+  painting/compositing (`timelineLive` / `orbitLive`, set false in the layer's
+  `onAnimationComplete`). SHOW is **derived** (`!isYears || timelineLive` etc.) so the
+  entering layer is visible on the crossfade's first frame; HIDE is completion-driven so
+  visibility never flips in the same frame the morph starts (the old hitch). The orbit's
+  `frameloop` rides the same `orbitLive` flag, and its crossfade is **opacity-only** (no
+  scale leg — a scaling WebGL canvas re-composites every frame).
+- **No static `will-change`** on `.view-stack` / `.view-layer` / `.card-manual` — framer
+  applies it for the duration of each animation (and a card sets it imperatively only
+  during a live drag), so nothing is pinned to its own GPU layer at rest.
 
 The **zoom pill is the scrollbar**: its width = `viewport/scrollWidth`, its position
 tracks scroll, and you can drag it. See `syncThumb` / `thumbX` / `thumbWmv`. The smooth
 morph (zoom switches) is ONE `animate()` driving x+width together; its target is
 **re-read when a scroll/resize fires mid-morph** (`thumbDirty` flag — not per-frame, that
-would force a reflow every frame) so the programmatic scroll restore can't leave a stale
-endpoint that snaps later.
+would force a reflow every frame). On a zoom switch the `scrollLeft` restore and the pill
+morph are split across frames (`syncThumb(true)` is deferred to `requestAnimationFrame`)
+so the morph's first frame isn't stacked on the restore's forced reflow.
 
-**Boot sequence**: white overlay + thin grey bar (`.boot-overlay/.boot-track/.boot-fill`).
-Progress is REAL: storage read (→18%) then `buildMediaItems` progress (YearOrbit
-`onProgress` → 20–95%) and `onReady` → `booted`. On `booted`: overlay fades, the
-view-stack dissolves in from above, orbit planes **stagger in** (module `introStart` +
-per-plane seeded delay in `InfiniteMemoryCanvas`), and the dock rises from the bottom
-edge (delay 0.35, ~1s). Failure paths (corrupt blob, IDB error) still fire `onReady` /
-set `memories` — the overlay must NEVER hang.
+**Boot sequence**: white overlay + thin grey bar (`.boot-overlay/.boot-track/.boot-fill`;
+the bar width is driven by a MotionValue — no CSS transition). It's a **fixed ~1s
+loader**: `bootMV` animates 0→100% over 1s and `booted` flips on a 1000ms timer,
+**regardless** of whether the orbit textures finished (the planes stagger-fade in as they
+load). A slow storage read can't strand it. On `booted`: overlay fades, the view-stack
+dissolves in from above, orbit planes **stagger in** (module `introStart` + per-plane
+seeded delay in `InfiniteMemoryCanvas`), and the dock rises from the bottom edge.
 
 ---
 
@@ -182,7 +192,7 @@ scale 0.98; gesture transforms settle on a 0.14s tween (never a spring).
 - **No future dates.** New cards and the calendar clamp to today (`todayISO()`).
 - **No per-day limit.** Any number of memories per day (the old 2/day cap + toast were removed).
 - **App opens in Years view** on load (`zoomIdx` starts at 2) to avoid a Days-pill flash,
-  behind the boot overlay (white + thin grey bar) until the orbit's media is built.
+  behind the fixed ~1s boot loader (see *Boot sequence*).
 - **Colours are fixed at creation** (truly random from the palette), not user-changeable.
   Card title text always uses the matching `color.text` hue of its pastel `color.bg`.
 - **Icon buttons follow the `.icon-btn` pattern**: no fill at rest, fill on hover/active.

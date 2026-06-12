@@ -159,6 +159,7 @@ const MemoryCard = forwardRef(function MemoryCard({
       draggedRef.current = true
       try { s.el.setPointerCapture(s.pointerId) } catch { /* synthetic pointers */ }
       s.el.style.zIndex = '60'
+      s.el.style.willChange = 'transform' // promote ONLY for the live drag
       // flips the column to manual SYNCHRONOUSLY (App uses flushSync), so this
       // card is absolute + bound to yMV before the first offset is written
       onDragStart?.(m.id)
@@ -176,7 +177,7 @@ const MemoryCard = forwardRef(function MemoryCard({
     if (!s.moved) return
     try { s.el.releasePointerCapture(s.pointerId) } catch { /* already released */ }
     const el = s.el
-    setTimeout(() => { el.style.zIndex = '' }, 200) // after the settle finishes
+    setTimeout(() => { el.style.zIndex = ''; el.style.willChange = '' }, 200) // after the settle finishes
     onDragEnd?.(m.id, yMV.get())
   }
   // the browser stole the pointer (touch became a scroll, system gesture) —
@@ -187,6 +188,7 @@ const MemoryCard = forwardRef(function MemoryCard({
     if (!s?.moved) return
     try { s.el.releasePointerCapture(s.pointerId) } catch { /* already released */ }
     s.el.style.zIndex = ''
+    s.el.style.willChange = ''
     onDragCancel?.(m.id)
   }
   // unmount safety: if the card is removed mid-drag (deleted, column regroup)

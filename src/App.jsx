@@ -20,10 +20,11 @@ const SHELL_MORPH_MS = 700
 
 // A card is worth keeping if it has a title, body, or any media
 const isEmpty = (m) => !m.title?.trim() && !m.body?.trim() && !(m.media?.length)
-// view cross-fade: opacity dissolves quickly, position/scale settles a touch
-// slower on the same swift curve — reads as a smooth, fast dissolve (no bounce)
+// view cross-fade — tuned to land WITH the LIQUID pill/card glide (~0.4s) so
+// the whole switch is one motion. The orbit layer is opacity-only (no scale
+// leg — see its animate), so the WebGL canvas isn't re-composited every frame.
 const VIEW_SWAP = {
-  scale: { duration: 0.5, ease: SWIFT },
+  scale: { duration: 0.42, ease: SWIFT },
   opacity: { duration: 0.3, ease: 'easeOut' },
 }
 // one-time entrance for the whole stack after boot — calm and deliberate
@@ -128,6 +129,13 @@ export default function App() {
   // it survives any retuning of VIEW_SWAP and rapid-toggle retargets.
   const [orbitLive, setOrbitLive] = useState(true)
   useEffect(() => { if (isYears) setOrbitLive(true) }, [isYears])
+
+  // The 2D timeline layer's mirror of orbitLive: visible while it's the active
+  // view OR mid-crossfade, then visibility:hidden once its fade-out completes
+  // (so the off-screen timeline stops painting). Re-shown the instant we leave
+  // Years, before that crossfade begins.
+  const [timelineLive, setTimelineLive] = useState(true)
+  useEffect(() => { if (!isYears) setTimelineLive(true) }, [isYears])
 
   // ---- load / persist -------------------------------------------------
   useEffect(() => {
@@ -331,14 +339,18 @@ export default function App() {
     setZoomIdx(idx)
   }
 
-  // restore the anchored fraction right after the canvas re-renders, then morph the pill
+  // restore the anchored fraction right after the canvas re-renders, then morph
+  // the pill. The scrollLeft write forces a reflow (it reads scrollWidth); start
+  // the pill morph on the NEXT frame so its first frame isn't stacked on that
+  // same reflow (double forced layout on the switch frame).
   useLayoutEffect(() => {
     const el = scrollRef.current
     if (el && pendingCenter.current !== null) {
       el.scrollLeft = pendingCenter.current * (el.scrollWidth - el.clientWidth)
       pendingCenter.current = null
     }
-    syncThumb(true)
+    const raf = requestAnimationFrame(() => syncThumb(true))
+    return () => cancelAnimationFrame(raf)
   }, [zoomIdx, widthPx, syncThumb])
 
   // ---- mutations -------------------------------------------------------
@@ -658,11 +670,12 @@ export default function App() {
 
   return (
     <div className="viewport" onDragOver={(e) => e.preventDefault()} onDrop={onDrop}>
-      {/* Both views stay mounted and cross-fade — remounting the 3D canvas on
-          every Months↔Years switch (WebGL context + shaders + textures) was
-          the source of the switch lag. Hidden layers stay opacity-0 but PAINTED
-          (flipping visibility forced a full repaint in the same frame the pill
-          morph starts), and the orbit's frameloop pauses AFTER its fade ends. */}
+      {/* Both views stay MOUNTED and cross-fade — remounting the 3D canvas on
+          every Months↔Years switch (WebGL context + shaders + textures) was the
+          source of the switch lag. But once a crossfade COMPLETES the inactive
+          layer is visibility:hidden so it stops painting (timelineLive /
+          orbitLive, completion-driven), and it's re-shown before the next
+          crossfade begins — the symmetric partner to the orbit frameloop pause. */}
       <motion.div
         className="view-stack"
         initial={false}
@@ -678,6 +691,10 @@ export default function App() {
         initial={false}
         animate={isYears ? { opacity: 0, scale: 0.985 } : { opacity: 1, scale: 1 }}
         transition={VIEW_SWAP}
+        // SHOW is derived (active view, or mid-fade) so the entering layer is
+        // never hidden on the crossfade's first frame; HIDE is completion-driven
+        style={{ visibility: (!isYears || timelineLive) ? 'visible' : 'hidden' }}
+        onAnimationComplete={() => { if (zoomIdRef.current === 'years') setTimelineLive(false) }}
       >
       {/* layoutScroll: framer's projection accounts for this container's scroll
           offset when measuring layoutId flights — without it the programmatic
@@ -775,11 +792,13 @@ export default function App() {
       <motion.div
         className={`view-layer ${isYears ? '' : 'view-layer-off'}`}
         initial={false}
-        animate={isYears ? { opacity: 1, scale: 1 } : { opacity: 0, scale: 1.04 }}
+        animate={isYears ? { opacity: 1 } : { opacity: 0 }}
         transition={VIEW_SWAP}
-        // pause the orbit's frameloop only once its fade-out has actually
-        // finished (completion-driven; survives VIEW_SWAP retuning and
-        // rapid-toggle retargets — re-entering Years just retargets the fade)
+        // orbitLive drives BOTH the frameloop pause AND visibility:hidden, so the
+        // hidden WebGL canvas neither renders nor composites. Flipped to false
+        // only once the fade-out finishes (completion-driven; survives retuning
+        // and rapid-toggle retargets — re-entering Years just retargets the fade)
+        style={{ visibility: (isYears || orbitLive) ? 'visible' : 'hidden' }}
         onAnimationComplete={() => { if (zoomIdRef.current !== 'years') setOrbitLive(false) }}
       >
         <YearOrbit

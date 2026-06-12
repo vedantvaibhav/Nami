@@ -22,23 +22,25 @@ body {
 .boot-fill {
   height: 100%; border-radius: 2px;
   background: #C7C7C2;
-  transition: width 0.25s ease;
+  /* width is driven by the BootBar MotionValue — no CSS transition (would
+     double-animate and lag the bar behind the real fill) */
 }
 
 .viewport { position: relative; height: 100vh; }
 
-/* one-time entrance wrapper — dissolves the whole stack in on first load */
-.view-stack { position: absolute; inset: 0; will-change: transform, opacity; }
+/* one-time entrance wrapper — dissolves the whole stack in on first load.
+   No static will-change: framer applies it for the duration of the entrance
+   animation and removes it at rest, so we don't pin a GPU layer forever. */
+.view-stack { position: absolute; inset: 0; }
 
 /* stacked view layers (2D timeline + 3D orbit) cross-faded on zoom change.
-   Promote each to its own compositor layer so the opacity+scale crossfade is
-   pure GPU work and never re-rasterises the timeline mid-switch (the cause of
-   the first year->month hitch). */
+   No static will-change / translateZ either — framer promotes each layer only
+   while its opacity/scale crossfade is actually running, then de-promotes. A
+   permanent layer pinned both views to the GPU forever (memory + compositing
+   cost). The inactive layer is also visibility:hidden at rest (see JS) so it
+   isn't painted at all. */
 .view-layer {
   position: absolute; inset: 0;
-  will-change: transform, opacity;
-  transform: translateZ(0);
-  backface-visibility: hidden;
 }
 /* the inactive layer stays painted (opacity 0) for a smooth crossfade, but must
    not capture pointer/scroll. !important is required: R3F sets an inline
@@ -84,7 +86,9 @@ body {
   display: block;
   bottom: 0;
 }
-.card-manual { will-change: transform; }
+/* .card-manual: no static will-change — it's set imperatively only while a
+   card is actually being dragged (MemoryCard startDrag/endDrag), so we don't
+   pin a layer for every placed card at rest. */
 .card {
   position: relative; width: 100%;
   border-radius: 16px; padding: 16px 16px 14px;
