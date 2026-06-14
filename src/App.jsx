@@ -671,7 +671,7 @@ export default function App() {
       <motion.div
         className="view-stack"
         initial={false}
-        animate={booted ? { opacity: 1, y: 0 } : { opacity: 0, y: -18 }}
+        animate={booted ? { opacity: 1 } : { opacity: 0 }}
         transition={APP_ENTER}
         // `entered` (gates the cards' one-time fade-in) flips when the boot
         // entrance actually finishes — completion-driven, so it can never
