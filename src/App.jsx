@@ -813,10 +813,10 @@ export default function App() {
           }}
           style={{ borderRadius: 24 }}
           transition={{
-            // entrance: tied to the REAL boot signal — rises slowly from the
-            // bottom edge once everything is ready (content reveals first)
-            y: { duration: 1.0, ease: SWIFT, delay: 0.35 },
-            opacity: { duration: 0.7, ease: 'easeOut', delay: 0.35 },
+            // entrance: the panel rises LAST — after the content/photo and the
+            // empty-state line have appeared (staged: photo → text ~0.9s → panel)
+            y: { duration: 0.9, ease: SWIFT, delay: 1.1 },
+            opacity: { duration: 0.6, ease: 'easeOut', delay: 1.1 },
             // size animates ONLY during an open/close morph (shellMorph state —
             // survives mid-morph re-renders); otherwise self-measurement snaps.
             // While open, content growth (adding a photo) animates gently.

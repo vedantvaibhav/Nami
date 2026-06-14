@@ -48,22 +48,6 @@ function OrbitModal({ m, onClose }) {
   )
 }
 
-// Apple "hello"-style drawn-on reveal: each glyph rises + unblurs into place,
-// left to right, so the handwriting line writes itself on. A pure per-char CSS
-// animation (compositor-driven, reliable) keyed by animation-delay — the
-// clip-path and framer-variant attempts left the line stuck hidden.
-function DrawnLine({ text }) {
-  return (
-    <div className="orbit-empty-text" aria-label={text}>
-      {[...text].map((ch, i) => (
-        <span key={i} style={{ animationDelay: `${0.4 + i * 0.045}s` }} aria-hidden="true">
-          {ch === ' ' ? ' ' : ch}
-        </span>
-      ))}
-    </div>
-  )
-}
-
 export default function YearOrbit({ memories, active = true, revealed = true, onProgress, onReady }) {
   const [media, setMedia] = useState(null)
   const [open, setOpen] = useState(null)
@@ -100,12 +84,13 @@ export default function YearOrbit({ memories, active = true, revealed = true, on
     <div className="orbit-view">
       {media && <InfiniteMemoryCanvas media={media} active={active} revealed={revealed} onOpen={setOpen} />}
 
-      {/* empty state: nothing to orbit yet — a full-bleed cover image (its own
-          baked-in text). Add the first memory and the real orbit layout takes over. */}
+      {/* empty state: a full-bleed photo that slowly zooms, then the line fades
+          in, then the bottom panel rises (staged via CSS delays). The first
+          memory swaps this for the real orbit. */}
       {memories.length === 0 && (
         <div className="orbit-empty">
           <img className="orbit-empty-img" src="/empty_state.png" alt="" draggable={false} />
-          <DrawnLine text="The unscripted moments that make you pause" />
+          <div className="orbit-empty-text">The unscripted moments that make you pause</div>
         </div>
       )}
 

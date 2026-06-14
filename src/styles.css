@@ -440,28 +440,21 @@ body {
   from { transform: scale(1); }
   to   { transform: scale(1.07); }
 }
-/* drawn-on line over the image — handwriting (Caveat), deep green, upper third */
+/* the line over the image — handwriting (Caveat), deep green, upper third.
+   Staged entrance: the photo zooms first, then this fades in (delay), then the
+   bottom panel rises (see the dock entrance delay in App.jsx). */
 .orbit-empty-text {
   position: absolute; top: 30%; left: 50%; transform: translate(-50%, -50%);
   width: 92%; text-align: center; white-space: nowrap;
   font-family: 'Caveat', cursive;
   font-size: clamp(22px, 3.4vw, 44px); font-weight: 600; letter-spacing: 0.01em;
   color: #143a2b; text-shadow: 0 1px 10px rgba(255, 255, 255, 0.35);
+  opacity: 0;
+  animation: orbit-text-in 0.9s ease-out 0.9s forwards;
 }
-/* each glyph writes itself on, left to right (delay set inline per char).
-   Resting state is VISIBLE; the animation only fades it up from hidden, so the
-   line can never get stuck invisible. */
-.orbit-empty-text span {
-  display: inline-block; white-space: pre;
-  animation: orbit-char-in 0.42s both;
-}
-@keyframes orbit-char-in {
-  from { opacity: 0; transform: translateY(9px); filter: blur(4px); }
-  to   { opacity: 1; transform: translateY(0);  filter: blur(0); }
-}
-/* if motion is reduced/disabled, show the line statically (never hidden) */
+@keyframes orbit-text-in { from { opacity: 0; } to { opacity: 1; } }
 @media (prefers-reduced-motion: reduce) {
-  .orbit-empty-text span { animation: none; opacity: 1; filter: none; transform: none; }
+  .orbit-empty-text { animation: none; opacity: 1; }
 }
 /* ---- orbit modal ---- */
 .orbit-backdrop {
