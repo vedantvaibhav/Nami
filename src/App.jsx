@@ -6,7 +6,7 @@ import MemoryCard from './MemoryCard.jsx'
 import YearOrbit from './YearOrbit.jsx'
 import Lightbox from './Lightbox.jsx'
 import Composer from './Composer.jsx'
-import { loadMemories, saveMemories, saveImage, deleteImage, COLOR_KEYS } from './store.js'
+import { loadMemories, saveMemories, saveImageMedia, deleteImage, COLOR_KEYS } from './store.js'
 import { kindFromMime, MAX_SAFE_BYTES } from './media.js'
 import { ZOOMS, markerLabel, toISO, fromISO, unitStart } from './time.js'
 
@@ -507,8 +507,11 @@ export default function App() {
 
   // commit render-computed fallback tops into pos[view] so cards added to a
   // hand-arranged column persist exactly where they first appeared (one
-  // positioning mechanism — no parallel cache to invalidate). No deps: runs
-  // after every render, no-ops unless the columns map queued seeds.
+  // positioning mechanism — no parallel cache to invalidate). Deps are
+  // [memories, view2d] — the only things that change which cards need a seed —
+  // NOT a missing dep array (that ran on every render and is the classic
+  // "Maximum update depth" setState-in-effect loop). Converges in one extra
+  // pass: after the commit the seeded cards have pos so nothing re-queues.
   useEffect(() => {
     const seeds = pendingSeeds.current
     if (!seeds.length) return
@@ -518,7 +521,7 @@ export default function App() {
       if (!s || (m.pos && m.pos[s.view] != null)) return m
       return { ...m, pos: { ...(m.pos || {}), [s.view]: s.top } }
     }))
-  })
+  }, [memories, view2d])
 
   // completely random pastel from the palette; fixed once assigned
   const nextColor = () => COLOR_KEYS[Math.floor(Math.random() * COLOR_KEYS.length)]
@@ -614,7 +617,7 @@ export default function App() {
       }
       const mediaId = crypto.randomUUID()
       try {
-        await saveImage(mediaId, file)
+        await saveImageMedia(mediaId, file, kind) // original + (for images) a thumbnail
         setMemories((ms) =>
           ms.map((m) =>
             m.id === id

@@ -1,6 +1,8 @@
 import { get, set, del } from 'idb-keyval'
 
 const LIST_KEY = 'moments:list'
+const THUMB_MAX = 800     // long-edge px for the card + orbit thumbnails
+const THUMB_QUALITY = 0.8 // JPEG quality for thumbnails
 
 export async function loadMemories() {
   return (await get(LIST_KEY)) || null
@@ -10,24 +12,95 @@ export async function saveMemories(list) {
   await set(LIST_KEY, list)
 }
 
-export async function saveImage(id, blob) {
+// Downscale an image blob to a small JPEG thumbnail (long edge THUMB_MAX).
+// Returns null if it can't be decoded (caller falls back to the original).
+export async function makeThumbnail(blob) {
+  try {
+    const bmp = await createImageBitmap(blob)
+    const scale = Math.min(1, THUMB_MAX / Math.max(bmp.width, bmp.height))
+    const w = Math.max(1, Math.round(bmp.width * scale))
+    const h = Math.max(1, Math.round(bmp.height * scale))
+    const canvas = document.createElement('canvas')
+    canvas.width = w
+    canvas.height = h
+    canvas.getContext('2d').drawImage(bmp, 0, 0, w, h)
+    bmp.close?.()
+    const out = await new Promise((res) => canvas.toBlob(res, 'image/jpeg', THUMB_QUALITY))
+    return out || null
+  } catch {
+    return null // undecodable (e.g. HEIC on some browsers) — fall back to original
+  }
+}
+
+// Persist a media blob. For images, also generate + store a small thumbnail
+// under `thumb:<id>` so cards/orbit never decode the full-resolution original.
+// Video/audio store only the original (no thumbnail).
+export async function saveImageMedia(id, blob, kind) {
   await set('img:' + id, blob)
+  if (kind === 'image') {
+    const t = await makeThumbnail(blob)
+    if (t) await set('thumb:' + id, t)
+  }
 }
 
+// Delete an image + its thumbnail, and revoke/drop any cached object URLs.
 export async function deleteImage(id) {
+  revokeURL('img:' + id)
+  revokeURL('thumb:' + id)
   await del('img:' + id)
+  await del('thumb:' + id)
 }
 
+// storageKey ('img:<id>' | 'thumb:<id>') -> object URL
 const urlCache = new Map()
 
-export async function imageURL(id) {
-  if (urlCache.has(id)) return urlCache.get(id)
-  const blob = await get('img:' + id)
+async function urlForKey(key) {
+  if (urlCache.has(key)) return urlCache.get(key)
+  const blob = await get(key)
   if (!blob) return null
   const url = URL.createObjectURL(blob)
-  urlCache.set(id, url)
+  // a concurrent caller may have created one while we awaited — keep ONE, revoke the dupe
+  if (urlCache.has(key)) { URL.revokeObjectURL(url); return urlCache.get(key) }
+  urlCache.set(key, url)
   return url
 }
+
+// Full-resolution original — ONLY the lightbox should use this.
+export async function imageURL(id) {
+  if (!id) return null
+  return urlForKey('img:' + id)
+}
+
+// Small thumbnail — cards + orbit use this. Prefers `thumb:<id>`; for memories
+// saved before thumbnails existed, lazily generates one from the original (and
+// persists it), falling back to the original URL only if generation fails.
+export async function thumbURL(id) {
+  if (!id) return null
+  const key = 'thumb:' + id
+  if (urlCache.has(key)) return urlCache.get(key)
+  let blob = await get(key)
+  if (!blob) {
+    const orig = await get('img:' + id)
+    if (!orig) return null
+    blob = await makeThumbnail(orig)
+    if (blob) await set(key, blob)
+    else return imageURL(id) // generation failed — show the original
+  }
+  if (urlCache.has(key)) return urlCache.get(key)
+  const url = URL.createObjectURL(blob)
+  urlCache.set(key, url)
+  return url
+}
+
+// Revoke a single cached object URL by storage key.
+export function revokeURL(key) {
+  const url = urlCache.get(key)
+  if (url) { URL.revokeObjectURL(url); urlCache.delete(key) }
+}
+
+// Revoke just the heavy full-res original (e.g. when the lightbox closes) —
+// the card thumbnail (a different key) stays cached.
+export function revokeOriginal(id) { revokeURL('img:' + id) }
 
 export const COLORS = {
   blue:   { bg: '#DBE9FC', text: '#2563EB' },

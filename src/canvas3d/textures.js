@@ -1,6 +1,6 @@
 // Builds MediaItems for the 3D canvas: photos use their stored blobs,
 // notes and quotes are painted onto offscreen canvases so *everything* is a card.
-import { COLORS, imageURL } from '../store.js'
+import { COLORS, thumbURL } from '../store.js'
 import { cardDateLabel } from '../time.js'
 import { inferType, firstImageId } from '../media.js'
 
@@ -124,7 +124,8 @@ const roundedPhoto = (url) =>
   })
 
 async function photoItem(m) {
-  const url = await imageURL(firstImageId(m))
+  // build the orbit texture from the THUMBNAIL, never the full-res original
+  const url = await thumbURL(firstImageId(m))
   if (!url) return null
   return roundedPhoto(url)
 }

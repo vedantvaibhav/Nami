@@ -382,6 +382,19 @@ export default function InfiniteMemoryCanvas({ media, active = true, revealed = 
     if (revealed && introStart === null) introStart = performance.now()
   }, [revealed])
 
+  // VRAM release: dispose GPU textures whose URL is no longer in the live media
+  // set (deleted/edited memories). Deferred so every plane has swapped to its
+  // new texture first — disposing a still-bound texture would flash/warn.
+  useEffect(() => {
+    const live = new Set(media.map((m) => m.url))
+    const t = setTimeout(() => {
+      for (const [url, tex] of textureCache) {
+        if (!live.has(url)) { tex.dispose?.(); textureCache.delete(url) }
+      }
+    }, 1500)
+    return () => clearTimeout(t)
+  }, [media])
+
   if (!media.length) return null
 
   return (

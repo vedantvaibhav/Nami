@@ -1,19 +1,25 @@
 import { forwardRef, memo, useEffect, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
-import { COLORS, imageURL } from './store.js'
+import { COLORS, imageURL, thumbURL } from './store.js'
 import { icons, inferType, seededBars, seededTilt, seedFrac, videoThumb } from './media.js'
 import { SWIFT, LIQUID } from './anim.js'
 
-export function useImage(imgId) {
+// resolve an object URL via a store getter (imageURL = full-res original,
+// thumbURL = small thumbnail). Cards/orbit use thumbnails; only the lightbox
+// loads originals — so the app never holds full-res decodes for the timeline.
+function useResolvedURL(imgId, getter) {
   const [url, setUrl] = useState(null)
   useEffect(() => {
     let live = true
-    if (imgId) imageURL(imgId).then((u) => live && setUrl(u))
+    if (imgId) getter(imgId).then((u) => live && setUrl(u))
     else setUrl(null)
     return () => { live = false }
   }, [imgId])
   return url
 }
+
+export const useImage = (imgId) => useResolvedURL(imgId, imageURL) // full-res (lightbox)
+export const useThumb = (imgId) => useResolvedURL(imgId, thumbURL) // small (cards/orbit)
 
 export const Icon = ({ d, size = 16, stroke = 1.8, className = '' }) => (
   <svg
@@ -33,7 +39,7 @@ export const Icon = ({ d, size = 16, stroke = 1.8, className = '' }) => (
 
 // ---- media renderers -------------------------------------------------------
 function StackImg({ id, style }) {
-  const url = useImage(id)
+  const url = useThumb(id)
   if (!url) return null
   return <img className="stack-img" style={style} src={url} alt="" draggable={false} decoding="async" />
 }
@@ -43,7 +49,7 @@ function StackImg({ id, style }) {
 // peek out at the corners. The top print stays the focus (see reference).
 function PhotoBlock({ m }) {
   const images = m.media.filter((x) => x.kind === 'image').slice(0, 4)
-  const topUrl = useImage(images[0]?.id)
+  const topUrl = useThumb(images[0]?.id)
   if (!topUrl) return null
   if (images.length === 1) {
     return <img className="card-photo" src={topUrl} alt={m.title || 'memory'} draggable={false} decoding="async" />
