@@ -9,22 +9,8 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* ---- boot: plain white + a thin grey loading bar (no logo, no spinner) ---- */
-.boot-overlay {
-  position: fixed; inset: 0; z-index: 200;
-  background: #FDFDFC;
-  display: grid; place-items: center;
-}
-.boot-track {
-  width: 160px; height: 2px; border-radius: 2px;
-  background: #ECECEA; overflow: hidden;
-}
-.boot-fill {
-  height: 100%; border-radius: 2px;
-  background: #C7C7C2;
-  /* width is driven by the BootBar MotionValue — no CSS transition (would
-     double-animate and lag the bar behind the real fill) */
-}
+/* brief off-white screen while storage loads (idb is near-instant) — no loader */
+.boot-blank { position: fixed; inset: 0; background: #FDFDFC; }
 
 .viewport { position: relative; height: 100vh; }
 
@@ -446,6 +432,13 @@ body {
 }
 .orbit-empty-img {
   width: 100%; height: 100%; object-fit: cover; display: block;
+  /* slow, gentle Ken Burns zoom so the empty state feels alive */
+  transform-origin: 50% 45%;
+  animation: orbit-img-zoom 24s ease-in-out infinite alternate;
+}
+@keyframes orbit-img-zoom {
+  from { transform: scale(1); }
+  to   { transform: scale(1.07); }
 }
 /* drawn-on line over the image — handwriting (Caveat), deep green, upper third */
 .orbit-empty-text {

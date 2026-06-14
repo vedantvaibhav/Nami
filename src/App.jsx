@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { flushSync } from 'react-dom'
-import { AnimatePresence, LayoutGroup, animate, motion, motionValue, useMotionValue, useTransform } from 'framer-motion'
+import { AnimatePresence, LayoutGroup, animate, motion, motionValue, useMotionValue } from 'framer-motion'
 import { SWIFT, LIQUID } from './anim.js'
 import MemoryCard from './MemoryCard.jsx'
 import YearOrbit from './YearOrbit.jsx'
@@ -42,15 +42,6 @@ const MIN_GAP = 14                 // minimum gap kept between two cards (matche
 // physically impossible for the drop to bounce.
 const CARD_SETTLE = { type: 'tween', duration: 0.13, ease: [0.25, 1, 0.5, 1] }
 
-// the thin grey loading bar — driven by a MotionValue so per-item progress
-// updates never re-render the (already mounted) app behind the overlay
-function BootBar({ mv }) {
-  const width = useTransform(mv, (v) => `${Math.round(v)}%`)
-  return (
-    <div className="boot-track"><motion.div className="boot-fill" style={{ width }} /></div>
-  )
-}
-
 export default function App() {
   const [memories, setMemories] = useState(null)
   const [zoomIdx, setZoomIdx] = useState(2) // open in Years view on load
@@ -61,19 +52,16 @@ export default function App() {
   const toolbarRef = useRef(null)
   const composerRef = useRef(null)
 
-  // ---- boot sequence ----------------------------------------------------
-  // Simple fixed loader: white screen + thin grey bar that fills 0→100% over
-  // ~1s, then the Years view is revealed REGARDLESS of whether the orbit
-  // textures finished (the planes stagger-fade in as they load). A slow
-  // storage read can't strand it. Then the calm reveal already wired below:
-  // overlay fades, orbit pictures stagger in, dock rises from the bottom.
-  const bootMV = useMotionValue(0) // bar %
+  // ---- entrance ---------------------------------------------------------
+  // No loading screen — the orbit planes stagger-fade in on their own as they
+  // load, so a loader isn't needed. `booted` just gates the one-time calm
+  // reveal (view-stack dissolves in, dock rises); flip it on the next frame so
+  // that reveal still plays once, immediately, with no grey-bar wait.
   const [booted, setBooted] = useState(false)
   useEffect(() => {
-    const bar = animate(bootMV, 100, { duration: 1, ease: 'linear' })
-    const t = setTimeout(() => setBooted(true), 1000)
-    return () => { bar.stop(); clearTimeout(t) }
-  }, [bootMV])
+    const id = requestAnimationFrame(() => setBooted(true))
+    return () => cancelAnimationFrame(id)
+  }, [])
   const [dockDims, setDockDims] = useState({ toolbarW: 462, composerH: 450 })
   const scrollRef = useRef(null)
 
@@ -662,15 +650,9 @@ export default function App() {
     return () => window.removeEventListener('paste', onPaste)
   }, [memories])
 
-  if (!memories) {
-    // storage still loading — same white screen + thin grey bar the boot
-    // overlay shows, so the loading state is ONE continuous visual
-    return (
-      <div className="boot-overlay">
-        <BootBar mv={bootMV} />
-      </div>
-    )
-  }
+  // storage read is near-instant (idb-keyval) — a plain off-white screen for
+  // those few ms, no loader
+  if (!memories) return <div className="boot-blank" />
 
   const openCard = memories.find((m) => m.id === openId)
 
@@ -913,19 +895,6 @@ export default function App() {
 
       <AnimatePresence>
         {openCard && <Lightbox key={openCard.id} m={openCard} onClose={() => setOpenId(null)} />}
-      </AnimatePresence>
-
-      {/* boot overlay: plain white + a thin grey bar, fading out on reveal */}
-      <AnimatePresence>
-        {!booted && (
-          <motion.div
-            className="boot-overlay"
-            initial={false}
-            exit={{ opacity: 0, transition: { duration: 0.5, ease: 'easeOut' } }}
-          >
-            <BootBar mv={bootMV} />
-          </motion.div>
-        )}
       </AnimatePresence>
     </div>
   )
