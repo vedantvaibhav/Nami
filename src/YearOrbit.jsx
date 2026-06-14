@@ -84,12 +84,11 @@ export default function YearOrbit({ memories, active = true, revealed = true, on
     <div className="orbit-view">
       {media && <InfiniteMemoryCanvas media={media} active={active} revealed={revealed} onOpen={setOpen} />}
 
-      {/* empty state: nothing to orbit yet — a calm centred invite on the same
-          off-white orbit background (first pass; refine later) */}
+      {/* empty state: nothing to orbit yet — a full-bleed cover image (its own
+          baked-in text). Add the first memory and the real orbit layout takes over. */}
       {memories.length === 0 && (
         <div className="orbit-empty">
-          <div className="orbit-empty-title">Your memories will orbit here</div>
-          <div className="orbit-empty-sub">Add your first one to begin.</div>
+          <img className="orbit-empty-img" src="/empty_state.png" alt="" draggable={false} />
         </div>
       )}
 

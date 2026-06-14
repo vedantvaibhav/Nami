@@ -439,16 +439,14 @@ body {
 .canvas3d-container {
   position: absolute; inset: 0; touch-action: none;
 }
-/* ---- years empty state ---- */
+/* ---- years empty state: full-bleed cover image (text baked into it) ---- */
 .orbit-empty {
   position: absolute; inset: 0; z-index: 1;
-  display: flex; flex-direction: column; align-items: center; justify-content: center;
-  gap: 8px; text-align: center; pointer-events: none; user-select: none;
+  pointer-events: none; user-select: none;
 }
-.orbit-empty-title {
-  font-size: 22px; font-weight: 500; letter-spacing: -0.01em; color: #6B7280;
+.orbit-empty-img {
+  width: 100%; height: 100%; object-fit: cover; display: block;
 }
-.orbit-empty-sub { font-size: 15px; color: #ACB2BE; }
 /* ---- orbit modal ---- */
 .orbit-backdrop {
   position: fixed; inset: 0; z-index: 80;
