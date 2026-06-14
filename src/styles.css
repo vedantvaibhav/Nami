@@ -435,7 +435,8 @@ body {
   /* a clear, gentle push-in on load (then it keeps breathing slowly) */
   transform-origin: 50% 45%;
   will-change: transform;
-  animation: orbit-img-zoom 8s ease-in-out infinite alternate;
+  /* one slow push-in that HOLDS at the end — no reverse, no loop */
+  animation: orbit-img-zoom 10s ease-out forwards;
 }
 @keyframes orbit-img-zoom {
   from { transform: scale(1.04); }
