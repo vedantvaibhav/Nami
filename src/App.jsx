@@ -627,9 +627,13 @@ export default function App() {
   }
 
   // ---- canvas interactions ----------------------------------------------
-  // dropped/pasted files become a memory on today directly (no inline editing)
+  // dropped/pasted files become a memory on today directly (quick-add). While
+  // the composer is OPEN, drop/paste belong to the composer's upload block —
+  // they must NOT create a timeline card (the card should only appear on "Add
+  // to Timeline").
   const onDrop = async (e) => {
     e.preventDefault()
+    if (composerOpen) return // composer's upload handles its own drop
     if (zoom.id === 'years') return // orbit view: no drop target
     const files = [...(e.dataTransfer?.files || [])]
     if (!files.length) return
@@ -640,6 +644,7 @@ export default function App() {
 
   useEffect(() => {
     const onPaste = async (e) => {
+      if (composerOpen) return // don't quick-add while composing
       const item = [...(e.clipboardData?.items || [])].find((i) => i.type.startsWith('image/'))
       if (!item) return
       const card = blankCard(anchorDate())
@@ -648,7 +653,7 @@ export default function App() {
     }
     window.addEventListener('paste', onPaste)
     return () => window.removeEventListener('paste', onPaste)
-  }, [memories])
+  }, [memories, composerOpen])
 
   // storage read is near-instant (idb-keyval) — a plain off-white screen for
   // those few ms, no loader

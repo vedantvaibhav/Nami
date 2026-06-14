@@ -184,9 +184,9 @@ export default function Composer({ active, defaultDate, onClose, onAdd }) {
       <div
         className={`cmp-upload ${over ? 'cmp-upload-over' : ''} ${media.length ? 'cmp-upload-filled' : ''}`}
         onClick={() => fileRef.current?.click()}
-        onDragOver={(e) => { e.preventDefault(); setOver(true) }}
+        onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); setOver(true) }}
         onDragLeave={() => setOver(false)}
-        onDrop={(e) => { e.preventDefault(); setOver(false); attach([...e.dataTransfer.files]) }}
+        onDrop={(e) => { e.preventDefault(); e.stopPropagation(); setOver(false); attach([...e.dataTransfer.files]) }}
       >
         {media.length > 0 ? (
           <div className="cmp-media">
