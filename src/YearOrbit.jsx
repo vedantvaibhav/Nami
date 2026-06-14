@@ -48,23 +48,19 @@ function OrbitModal({ m, onClose }) {
   )
 }
 
-// Apple "hello"-style drawn-on reveal: the handwriting line is unveiled left→
-// to-right in one continuous stroke (a clip-path sweep), like it's being
-// written. (The real Apple effect strokes hardcoded SVG glyph paths; for
-// arbitrary text a clip reveal is the faithful equivalent.)
-function DrawnLine({ text, duration = 1.7, delay = 0.4 }) {
+// Apple "hello"-style drawn-on reveal: each glyph rises + unblurs into place,
+// left to right, so the handwriting line writes itself on. A pure per-char CSS
+// animation (compositor-driven, reliable) keyed by animation-delay — the
+// clip-path and framer-variant attempts left the line stuck hidden.
+function DrawnLine({ text }) {
   return (
-    <motion.div
-      className="orbit-empty-text"
-      initial={{ clipPath: 'inset(0 100% 0 0)', opacity: 0 }}
-      animate={{ clipPath: 'inset(0 0% 0 0)', opacity: 1 }}
-      transition={{
-        clipPath: { duration, ease: [0.22, 1, 0.36, 1], delay },
-        opacity: { duration: 0.25, ease: 'easeOut', delay },
-      }}
-    >
-      {text}
-    </motion.div>
+    <div className="orbit-empty-text" aria-label={text}>
+      {[...text].map((ch, i) => (
+        <span key={i} style={{ animationDelay: `${0.4 + i * 0.045}s` }} aria-hidden="true">
+          {ch === ' ' ? ' ' : ch}
+        </span>
+      ))}
+    </div>
   )
 }
 

@@ -455,6 +455,21 @@ body {
   font-size: clamp(22px, 3.4vw, 44px); font-weight: 600; letter-spacing: 0.01em;
   color: #143a2b; text-shadow: 0 1px 10px rgba(255, 255, 255, 0.35);
 }
+/* each glyph writes itself on, left to right (delay set inline per char).
+   Resting state is VISIBLE; the animation only fades it up from hidden, so the
+   line can never get stuck invisible. */
+.orbit-empty-text span {
+  display: inline-block; white-space: pre;
+  animation: orbit-char-in 0.42s both;
+}
+@keyframes orbit-char-in {
+  from { opacity: 0; transform: translateY(9px); filter: blur(4px); }
+  to   { opacity: 1; transform: translateY(0);  filter: blur(0); }
+}
+/* if motion is reduced/disabled, show the line statically (never hidden) */
+@media (prefers-reduced-motion: reduce) {
+  .orbit-empty-text span { animation: none; opacity: 1; filter: none; transform: none; }
+}
 /* ---- orbit modal ---- */
 .orbit-backdrop {
   position: fixed; inset: 0; z-index: 80;
