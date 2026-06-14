@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from 'react'
+import { forwardRef, memo, useEffect, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
 import { COLORS, imageURL } from './store.js'
 import { icons, inferType, seededBars, seededTilt, seedFrac, videoThumb } from './media.js'
+import { SWIFT } from './anim.js'
 
 export function useImage(imgId) {
   const [url, setUrl] = useState(null)
@@ -114,31 +115,146 @@ export function AudioBlock({ m, tall = false }) {
 }
 
 // ---- the card --------------------------------------------------------------
-export default function MemoryCard({
-  m, index = 0,
+// `forwardRef` so App can read a card's live `offsetTop` when a column flips
+// from auto → manual (seed manual Y from the current rendered layout = no jump).
+const MemoryCard = forwardRef(function MemoryCard({
+  m, index = 0, entered = false,
+  // manual placement (vertical drag): when `manual` is true the card is
+  // absolutely positioned at `manualY` (its committed top); `yMV` is a TRANSIENT
+  // drag offset (0 at rest; we write the pointer delta into it while dragging,
+  // and App glides it back to 0 after the drop commit). The drag is a CUSTOM
+  // pointer implementation — framer's drag system fought our settle animation
+  // (its constraint snap-back is an uncontrollable bouncy inertia), which was
+  // the source of the drop bounce and the glitchy feel.
+  // `instantLayout` is true for renders that belong to a drag (App's dragActive
+  // ref): the layout transition snaps so projection can't fight the gesture.
+  // `getDragBounds(id)` is called once per gesture (at the drag threshold) so
+  // no per-render DOM reads are needed to keep the drag clamped on-screen.
+  manual = false, manualY = 0, yMV, getDragBounds, instantLayout = false,
+  onDragStart, onDragEnd, onDragCancel,
   onDelete, onOpen,
-}) {
+}, ref) {
   const type = inferType(m)
   const color = COLORS[m.color] || COLORS.blue
   const isQuote = type === 'quote'
+  // distinguishes a drag from a click: set once the pointer moves past the
+  // threshold, consumed by onClick so a drag never opens the lightbox
+  const draggedRef = useRef(false)
+  // live gesture state: { startY, pointerId, moved, el }
+  const gestureRef = useRef(null)
 
-  // placement: most columns start at the top; an occasional first card (~30%)
-  // sits noticeably lower so the wall feels hand-arranged. Cards after the
-  // first keep one uniform gap (the column's flex gap) — no extra randomness.
+  const startDrag = (e) => {
+    if (e.button !== undefined && e.button !== 0) return
+    if (e.target.closest('button, .audio-pill')) return
+    draggedRef.current = false
+    gestureRef.current = { startY: e.clientY, pointerId: e.pointerId, moved: false, el: e.currentTarget }
+  }
+  const moveDrag = (e) => {
+    const s = gestureRef.current
+    if (!s || e.pointerId !== s.pointerId) return
+    const dy = e.clientY - s.startY
+    if (!s.moved) {
+      if (Math.abs(dy) < 4) return // dead zone: taps/clicks never start a drag
+      s.moved = true
+      draggedRef.current = true
+      try { s.el.setPointerCapture(s.pointerId) } catch { /* synthetic pointers */ }
+      s.el.style.zIndex = '60'
+      // flips the column to manual SYNCHRONOUSLY (App uses flushSync), so this
+      // card is absolute + bound to yMV before the first offset is written
+      onDragStart?.(m.id)
+      // clamp bounds for the whole gesture, computed once after the flip
+      s.bounds = getDragBounds?.(m.id) ?? null
+    }
+    // clamp live so the card physically can't leave the visible band
+    const b = s.bounds
+    yMV.set(b ? Math.min(Math.max(dy, b.top), b.bottom) : dy)
+  }
+  const endDrag = (e) => {
+    const s = gestureRef.current
+    if (!s || e.pointerId !== s.pointerId) return
+    gestureRef.current = null
+    if (!s.moved) return
+    try { s.el.releasePointerCapture(s.pointerId) } catch { /* already released */ }
+    const el = s.el
+    setTimeout(() => { el.style.zIndex = '' }, 200) // after the settle finishes
+    onDragEnd?.(m.id, yMV.get())
+  }
+  // the browser stole the pointer (touch became a scroll, system gesture) —
+  // REVERT the drag instead of committing wherever the card happened to be
+  const cancelDrag = () => {
+    const s = gestureRef.current
+    gestureRef.current = null
+    if (!s?.moved) return
+    try { s.el.releasePointerCapture(s.pointerId) } catch { /* already released */ }
+    s.el.style.zIndex = ''
+    onDragCancel?.(m.id)
+  }
+  // unmount safety: if the card is removed mid-drag (deleted, column regroup)
+  // the gesture can never end — without this, App's dragActive ref would stay
+  // true forever and force-snap every layout animation in the app
+  useEffect(() => () => { if (gestureRef.current?.moved) onDragCancel?.(m.id) }, [])
+
+  // placement (AUTO mode only): most columns start at the top; an occasional
+  // first card (~30%) sits noticeably lower so the wall feels hand-arranged.
+  // Cards after the first keep one uniform gap (the column's flex gap).
   const f = seedFrac(m.id + ':y')
   const scatter = index === 0 && f >= 0.7 ? Math.round(140 + f * 120) : 0
 
+  // inline style, composed from two orthogonal flags:
+  // - quotes have no pastel background (the highlight strips carry the colour)
+  // - AUTO: flex stack + scatter margin, NO `yMV` (layout="position" owns the
+  //   transform in auto mode; the flip to manual happens synchronously inside
+  //   the threshold-crossing pointermove, before any offset is written)
+  // - MANUAL: absolute at the committed `manualY` + the transient `yMV` offset
+  const style = {
+    ...(isQuote ? {} : { background: color.bg }),
+    ...(manual
+      ? { position: 'absolute', top: manualY, left: 0, width: '100%', y: yMV }
+      : { marginTop: scatter }),
+  }
+
   return (
     <motion.div
-      layout
-      className={`card ${isQuote ? 'card-quote' : ''}`}
-      style={isQuote ? { marginTop: scatter } : { marginTop: scatter, background: color.bg }}
-      initial={{ opacity: 0, scale: 0.95 }}
-      animate={{ opacity: 1, scale: 1 }}
-      exit={{ opacity: 0, scale: 0.9, transition: { duration: 0.15, ease: 'easeOut' } }}
-      transition={{ type: 'spring', stiffness: 380, damping: 30 }}
+      ref={ref}
+      // Toggle glide (Days↔Months): shared-layout flight via layoutId +
+      // layout="position" => animate ONLY the move, never the size (otherwise the
+      // card balloons in height while images re-measure mid-transition).
+      // Enabled for MANUAL cards too — so hand-arranged columns glide on view
+      // toggles like everyone else. Renders that belong to a drag set
+      // `instantLayout`, which makes the layout transition snap (duration 0) so
+      // projection never animates against the pointer or the drop compensation.
+      layoutId={m.id}
+      layout="position"
+      className={`card ${isQuote ? 'card-quote' : ''} ${manual ? 'card-manual' : ''}`}
+      style={style}
+      // fade in only on the first load; on toggle re-mounts start visible so the
+      // card just glides (no opacity flicker).
+      initial={entered ? false : { opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0, transition: { duration: 0.16, ease: 'easeOut' } }}
+      transition={{
+        // gesture transforms (whileHover / whileTap scale, shadow) settle on a
+        // quick tween — NO spring, so releasing a press never bounces the card
+        default: { type: 'tween', duration: 0.14, ease: 'easeOut' },
+        opacity: { duration: 0.34, ease: SWIFT, delay: Math.min(index, 6) * 0.04 },
+        // the toggle glide — quicker and critically damped (no float, no wobble);
+        // instant during drag-owned renders (see instantLayout above)
+        layout: instantLayout ? { duration: 0 } : { type: 'spring', stiffness: 170, damping: 26, mass: 1 },
+      }}
+      // ---- vertical drag (custom pointer implementation) ----
+      // We own the whole gesture: pointer delta -> yMV (clamped live), drop ->
+      // App commits the snapped top and glides yMV back to 0. ONE animation,
+      // zero framer drag inertia, so the drop can't bounce or glitch.
+      onPointerDown={startDrag}
+      onPointerMove={moveDrag}
+      onPointerUp={endDrag}
+      onPointerCancel={cancelDrag}
+      // lift on press (covers the whole drag too — tap has gesture priority)
+      whileTap={{ scale: 1.02, boxShadow: '0 6px 16px rgba(20,20,40,0.12)' }}
       whileHover={{ scale: 0.98 }}
       onClick={(e) => {
+        // a drag just happened — swallow the click so we don't open the lightbox
+        if (draggedRef.current) { draggedRef.current = false; return }
         if (e.target.closest('button, .audio-pill')) return
         if (type !== 'note' && !isQuote) onOpen(m.id)
       }}
@@ -176,4 +292,9 @@ export default function MemoryCard({
       )}
     </motion.div>
   )
-}
+})
+
+// memoized: App re-renders often (boot ticks, resize, dock morph) and every
+// drag-relevant prop is either stable (callbacks, yMV, ref) or a primitive,
+// so untouched cards skip re-rendering entirely
+export default memo(MemoryCard)

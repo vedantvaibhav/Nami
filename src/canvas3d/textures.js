@@ -98,32 +98,63 @@ function paintQuote(m) {
   return { url: c.toDataURL('image/png'), width: W, height: H }
 }
 
-const imgDimensions = (url) =>
+// ONE image load per photo: read the natural dimensions and draw the rounded-
+// rect clipped copy (rounded corners like the painted cards) from the same
+// decode, capped at 1024px so the texture stays sane
+const roundedPhoto = (url) =>
   new Promise((resolve) => {
     const img = new Image()
-    img.onload = () => resolve({ width: img.naturalWidth || 4, height: img.naturalHeight || 3 })
-    img.onerror = () => resolve({ width: 4, height: 3 })
+    img.onload = () => {
+      const w = img.naturalWidth || 4
+      const h = img.naturalHeight || 3
+      const scale = Math.min(1, 1024 / Math.max(w, h))
+      const cw = Math.max(1, Math.round(w * scale))
+      const ch = Math.max(1, Math.round(h * scale))
+      const c = document.createElement('canvas')
+      c.width = cw
+      c.height = ch
+      const ctx = c.getContext('2d')
+      roundRect(ctx, 0, 0, cw, ch, Math.round(Math.min(cw, ch) * 0.07))
+      ctx.clip()
+      ctx.drawImage(img, 0, 0, cw, ch)
+      resolve({ url: c.toDataURL('image/png'), width: w, height: h })
+    }
+    img.onerror = () => resolve({ url, width: 4, height: 3 })
     img.src = url
   })
 
 async function photoItem(m) {
   const url = await imageURL(firstImageId(m))
   if (!url) return null
-  const dims = await imgDimensions(url)
-  return { url, ...dims }
+  return roundedPhoto(url)
 }
 
-export async function buildMediaItems(memories) {
+export async function buildMediaItems(memories, onProgress) {
   await document.fonts.ready // Newsreader must be loaded before painting quotes
-  const items = []
-  for (const m of memories) {
-    if (m.draft) continue
-    const type = inferType(m)
-    let item = null
-    if (type === 'photo') item = await photoItem(m)
-    else if (type === 'quote') item = paintQuote(m)
-    else item = paintNote(m) // notes, video, audio → painted card
-    if (item) items.push({ ...item, memory: m })
+  const list = memories.filter((m) => !m.draft)
+  const results = new Array(list.length) // indexed: result order is stable
+  let next = 0
+  let done = 0
+  onProgress?.(0, list.length)
+  // a few items in flight at once — IDB reads + image decodes overlap instead
+  // of running strictly one-by-one (boot is several times faster on photos)
+  const worker = async () => {
+    while (next < list.length) {
+      const i = next++
+      const m = list[i]
+      // one corrupt blob must never hang the whole boot — skip the item instead
+      try {
+        const type = inferType(m)
+        let item = null
+        if (type === 'photo') item = await photoItem(m)
+        else if (type === 'quote') item = paintQuote(m)
+        else item = paintNote(m) // notes, video, audio → painted card
+        if (item) results[i] = { ...item, memory: m }
+      } catch { /* skip unreadable memory */ }
+      done += 1
+      onProgress?.(done, list.length)
+    }
   }
-  return items
+  await Promise.all(Array.from({ length: Math.min(4, list.length) }, worker))
+  return results.filter(Boolean)
 }

@@ -44,6 +44,9 @@ A **memory** object (stored in the `memories` array, persisted as a list):
   date: 'YYYY-MM-DD',    // day the memory belongs to (no future dates allowed)
   media: [{ id, kind, name }],  // kind: 'image' | 'video' | 'audio'; blob stored by id (max 4 images)
   color: 'blue'|'yellow'|'pink'|'purple'|'mint'|'peach',  // fixed at creation
+  pos?: { days?: number, months?: number }, // OPTIONAL manual vertical placement
+                                             // (px from the column top), PER VIEW.
+                                             // Absent ⇒ that column is still auto.
 }
 ```
 
@@ -91,28 +94,95 @@ In `App.jsx`, the `columns` memo turns `memories` into positioned columns:
 - **Years view** renders `<YearOrbit/>` instead of the column timeline.
 
 **Both views are ALWAYS mounted** as stacked `.view-layer`s in `App.jsx` and cross-fade
-on zoom change (0.3s, slight scale). This is deliberate: remounting the 3D canvas on
-every Months↔Years switch (WebGL context + shader compile + texture builds) caused
-visible lag. The hidden layer is **opacity-0 but stays painted** (`pointer-events: none`; do NOT
-flip `visibility` — that forces a full repaint in the same frame the pill morph starts
-and causes a visible hitch), and the orbit's R3F `frameloop` flips to `'never'` (via the
-`active` prop chain `App → YearOrbit → InfiniteMemoryCanvas`) so it costs ~nothing idle.
+on zoom change. This is deliberate: remounting the 3D canvas on every Months↔Years
+switch (WebGL context + shader compile + texture builds) caused visible lag. The hidden
+layer is **opacity-0 but stays painted** (`pointer-events: none`; do NOT flip
+`visibility` — that forces a full repaint in the same frame the pill morph starts).
 Consequences to respect:
 - `scrollRef` is **never null** anymore — gate orbit-vs-timeline logic on the zoom
   (see `zoomIdRef` used by `syncThumb`, and the `zoom.id === 'years'` check in `onDrop`).
 - Don't conditionally unmount either view; toggle via the layer animation.
+- **The 2D layout is FROZEN while in Years** (`view2d` latch in `App.jsx`): the timeline
+  keeps its last days/months grouping instead of regrouping to year-columns. Regrouping
+  the hidden layer mid-crossfade sent every `layoutId` card flying into a one-column
+  pile while the layer faded — the months↔years card glitch. All 2D logic (columns memo,
+  markers, drag `view`) keys on `view2d`, never `zoom.id`.
+- **The orbit's `frameloop` pauses 600ms AFTER leaving Years** (`orbitLive` state), so it
+  keeps rendering through its own fade-out instead of freezing on frame one.
 
 The **zoom pill is the scrollbar**: its width = `viewport/scrollWidth`, its position
-tracks scroll, and you can drag it. See `syncThumb` / `thumbX` / `thumbWmv`.
+tracks scroll, and you can drag it. See `syncThumb` / `thumbX` / `thumbWmv`. The smooth
+morph (zoom switches) is ONE `animate()` driving x+width together; its target is
+**re-read when a scroll/resize fires mid-morph** (`thumbDirty` flag — not per-frame, that
+would force a reflow every frame) so the programmatic scroll restore can't leave a stale
+endpoint that snaps later.
+
+**Boot sequence**: white overlay + thin grey bar (`.boot-overlay/.boot-track/.boot-fill`).
+Progress is REAL: storage read (→18%) then `buildMediaItems` progress (YearOrbit
+`onProgress` → 20–95%) and `onReady` → `booted`. On `booted`: overlay fades, the
+view-stack dissolves in from above, orbit planes **stagger in** (module `introStart` +
+per-plane seeded delay in `InfiniteMemoryCanvas`), and the dock rises from the bottom
+edge (delay 0.35, ~1s). Failure paths (corrupt blob, IDB error) still fire `onReady` /
+set `memories` — the overlay must NEVER hang.
+
+---
+
+## Manual card placement (vertical drag)
+
+In the **2D timeline only** (Days + Months; the Years orbit is unaffected) a card can be
+**dragged vertically within its own date column** to reposition it. The card's X is fixed
+(full column width) and its **date never changes** — no horizontal / cross-column drag.
+
+**Auto vs manual, per column, per view.** A column is either:
+- **auto** — the default flex stack + seeded `scatter` (top-aligned, 14px gap), or
+- **manual** — every card absolutely positioned at its own `top` (`m.pos[view]`).
+
+The **first drag** in a column **flips that whole column to manual** for the current view.
+It flips when the pointer crosses the 4px drag threshold (`onCardDragStart`, inside
+`flushSync`): every card's `pos[view]` is seeded from its **current `offsetTop`** and all
+become absolutely placed in the *same synchronous render* — no reflow, no visual jump.
+**Manual-ness is DERIVED FROM DATA** (`isManualCol`: any card with `pos[view]`), not local
+state, so manual layouts work after reload.
+
+**Persistence.** Manual Y is stored on the memory as **`m.pos = { days?, months? }`** (a memory
+sits in both a Days column and a Months column at independent positions). It rides the existing
+debounced `saveMemories` autosave, so it survives reload. Cards WITHOUT a `pos` in a manual
+column (newly added) stack below the lowest placed card; that fallback top is **committed into
+`pos[view]` by an effect right after the render that computed it** (`pendingSeeds`), so there is
+ONE positioning mechanism and the placement persists like any dragged position.
+
+**The drag is a CUSTOM pointer implementation** (`startDrag/moveDrag/endDrag/cancelDrag` in
+`MemoryCard.jsx`) — framer's drag system fought the settle (its constraint snap-back is an
+uncontrollable bouncy inertia). Pointer delta writes the per-card **`yMV` MotionValue** (App's
+`yMVs` map), clamped live to `dragBounds`. On drop (`commitDrag`): gentle magnetic snap
+(`SNAP_THRESHOLD = 12px`) to the column top or ABUTTING a neighbour with `MIN_GAP` (14px),
+clamp on-screen, then a **hard no-overlap resolve** (bands read from the LIVE DOM); the commit
+is `flushSync`ed and `yMV` slides to 0 (`CARD_SETTLE`, a 0.13s tween — cannot bounce).
+`onPointerCancel` and unmount-mid-drag **revert** via `cancelCardDrag` (never commit, never
+leak `dragActive`). Drop = silent `navigator.vibrate` tick. **No UI sounds anywhere.**
+
+**Always on-screen.** The band a card may occupy is `[0, visible - cardHeight]` where
+`visible = window.innerHeight - COL_TOP - DOCK_CLEARANCE(96)`, read LIVE at gesture time
+(`maxTopFor` / `getDragBounds` — no viewport-height state, so resizes don't re-render the card
+tree). Bounds are computed once per gesture at the drag threshold; `commitDrag` clamps at drop.
+Committed positions are NOT re-clamped at render (that collapsed tall columns).
+
+**Layout animation integration.** ALL cards (auto AND manual) carry `layoutId={m.id}` +
+`layout="position"` — manual columns glide on view toggles like everyone else. Renders that
+belong to a drag set App's **`dragActive` ref → `instantLayout` prop → layout transition
+`{duration: 0}`**, so projection never animates against the pointer or the drop compensation.
+`dragActive` is set at drag start and cleared in `commitDrag`/`cancelCardDrag` — if you add a
+new drag path, you MUST clear it. Drag lift = `whileTap` (scale 1.02 + soft shadow); hover =
+scale 0.98; gesture transforms settle on a 0.14s tween (never a spring).
 
 ---
 
 ## Key conventions / invariants
 
 - **No future dates.** New cards and the calendar clamp to today (`todayISO()`).
-- **Max `DAY_LIMIT = 2` memories per day.** Enforced at every add path (composer, drop,
-  paste) and surfaced via the `toast`.
-- **App opens in Years view** on load (`zoomIdx` starts at 2) to avoid a Days-pill flash.
+- **No per-day limit.** Any number of memories per day (the old 2/day cap + toast were removed).
+- **App opens in Years view** on load (`zoomIdx` starts at 2) to avoid a Days-pill flash,
+  behind the boot overlay (white + thin grey bar) until the orbit's media is built.
 - **Colours are fixed at creation** (truly random from the palette), not user-changeable.
   Card title text always uses the matching `color.text` hue of its pastel `color.bg`.
 - **Icon buttons follow the `.icon-btn` pattern**: no fill at rest, fill on hover/active.
@@ -125,10 +195,11 @@ tracks scroll, and you can drag it. See `syncThumb` / `thumbX` / `thumbWmv`.
   white-framed prints side by side, overlapping edges, seeded tilts.
 - **Photo expand = spread collage** (`COLLAGE` slots in `Lightbox.jsx`, up to 4 prints,
   minimal overlap so every print stays visible).
-- **Scattered placement**: cards are **mostly top-anchored** — the first card in a column
-  has `marginTop: 0` ~70% of the time, occasionally dropping to ~140–260px. Consecutive
-  cards keep ONE uniform gap (the column's 14px flex gap — no extra randomness).
-  Stable per card (`seedFrac`), never overlapping.
+- **Scattered placement (AUTO columns)**: cards are **mostly top-anchored** — the first card
+  in a column has `marginTop: 0` ~70% of the time, occasionally dropping to ~140–260px.
+  Consecutive cards keep ONE uniform gap (the column's 14px flex gap — no extra randomness).
+  Stable per card (`seedFrac`), never overlapping. Once a column is dragged it becomes
+  **manual** for that view and scatter no longer applies (see *Manual card placement*).
 - **Hover**: the card scales *down* slightly (`whileHover scale 0.98`) and the × delete
   appears. **No inline editing** — clicking a media card opens the lightbox; notes/quotes
   do nothing on click. The composer is the only add path (drop/paste create a card
@@ -136,8 +207,15 @@ tracks scroll, and you can drag it. See `syncThumb` / `thumbX` / `thumbWmv`.
 - **Tilts/waveforms are seeded by id** (`seededTilt`, `seededBars`) so they're stable
   across reloads.
 - **The bottom dock morphs** between the toolbar and the composer via measured
-  width/height (not framer `layout`), so there's no scale distortion. Open uses one
-  spring, close a slower one; size only animates during an actual open/close.
+  width/height (not framer `layout`), so there's no scale distortion. The size springs
+  (`SHELL_OPEN/CLOSE`, ~critically damped) animate ONLY while **`shellMorph` STATE** is
+  true (set on open/close, cleared by a 700ms timer). It must stay state, not a ref —
+  the old ref was cleared by whichever animation completed first, so the mid-morph
+  `ResizeObserver` re-render snapped the shell. Faces crossfade tightly (out 0.1s,
+  in 0.18s @ +0.07s) in time with the size morph.
+- **The scroller is `motion.div` with `layoutScroll`** — framer's projection must account
+  for its scroll offset or every `layoutId` glide breaks when the zoom switch restores
+  `scrollLeft` in the same commit. Don't remove it.
 
 ## How to add things
 

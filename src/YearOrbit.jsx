@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { COLORS } from './store.js'
 import { useImage } from './MemoryCard.jsx'
@@ -48,21 +48,41 @@ function OrbitModal({ m, onClose }) {
   )
 }
 
-export default function YearOrbit({ memories, active = true }) {
+export default function YearOrbit({ memories, active = true, revealed = true, onProgress, onReady }) {
   const [media, setMedia] = useState(null)
   const [open, setOpen] = useState(null)
 
+  // rebuild textures only when CONTENT changes — pos (manual drag Y) is not
+  // rendered here, and rebuilding every photo/note texture on each card drop
+  // was main-thread jank exactly when the drop settle animation runs
+  const contentKey = useMemo(
+    () => memories.map((m) => `${m.id}:${m.date}:${m.title}:${m.body}:${m.color}:${(m.media || []).map((x) => x.id).join(',')}`).join('|'),
+    [memories]
+  )
+
   useEffect(() => {
     let live = true
-    // every committed memory orbits here, regardless of its year
-    const items = memories.filter((m) => !m.draft)
-    buildMediaItems(items).then((built) => live && setMedia(built))
+    // every committed memory orbits here, regardless of its year.
+    // onProgress/onReady drive the app's boot loading bar — media building
+    // (blob decode + texture painting) is the real readiness signal.
+    buildMediaItems(memories, (done, total) => { if (live) onProgress?.(done, total) })
+      .then((built) => {
+        if (!live) return
+        setMedia(built)
+        onReady?.()
+      })
+      .catch(() => {
+        // a failed build must still lift the boot overlay — empty orbit > white hang
+        if (!live) return
+        setMedia([])
+        onReady?.()
+      })
     return () => { live = false }
-  }, [memories])
+  }, [contentKey])
 
   return (
     <div className="orbit-view">
-      {media && <InfiniteMemoryCanvas media={media} active={active} onOpen={setOpen} />}
+      {media && <InfiniteMemoryCanvas media={media} active={active} revealed={revealed} onOpen={setOpen} />}
 
       <AnimatePresence>
         {open && <OrbitModal m={open} onClose={() => setOpen(null)} />}
