@@ -8,7 +8,7 @@ import Lightbox from './Lightbox.jsx'
 import Composer from './Composer.jsx'
 import { loadMemories, saveMemories, saveImageMedia, deleteImage, COLOR_KEYS } from './store.js'
 import { kindFromMime, MAX_SAFE_BYTES } from './media.js'
-import { ZOOMS, markerLabel, toISO, fromISO, unitStart } from './time.js'
+import { ZOOMS, markerLabel, toISO, fromISO, unitStart, currentMonthDays, currentYearMonths } from './time.js'
 
 const MARKER_H = 130 // px reserved at top for date markers
 // LIQUID (the shared switch spring — pill morph + card glide) lives in anim.js
@@ -166,9 +166,11 @@ export default function App() {
   }, [memories])
 
   // ---- timeline geometry ----------------------------------------------
-  // Days: sparse — only days with memories become columns.
-  // Months: continuous — every month from Jan of the earliest year through
-  // the current month (empty months show too), growing as time passes.
+  // Days: sparse — only days with memories become columns. Months: continuous
+  // — every month from Jan of the earliest year through the current month.
+  // EMPTY STATE: when a view would otherwise be blank (no memories, or no day
+  // columns), fall back to a scaffold of placeholder columns so the canvas is
+  // never empty — the current month's days, or the current year's 12 months.
   const columns = useMemo(() => {
     if (!memories) return []
     const groups = new Map()
@@ -180,15 +182,20 @@ export default function App() {
 
     let keys
     if (view2d === 'months') {
-      const today = new Date()
-      let earliestYear = today.getFullYear()
-      for (const m of memories) earliestYear = Math.min(earliestYear, fromISO(m.date).getFullYear())
-      keys = []
-      let d = new Date(earliestYear, 0, 1)
-      const end = new Date(today.getFullYear(), today.getMonth(), 1)
-      while (d <= end) { keys.push(toISO(d)); d = new Date(d.getFullYear(), d.getMonth() + 1, 1) }
+      if (!memories.length) {
+        keys = currentYearMonths() // empty state: all 12 months of this year
+      } else {
+        const today = new Date()
+        let earliestYear = today.getFullYear()
+        for (const m of memories) earliestYear = Math.min(earliestYear, fromISO(m.date).getFullYear())
+        keys = []
+        let d = new Date(earliestYear, 0, 1)
+        const end = new Date(today.getFullYear(), today.getMonth(), 1)
+        while (d <= end) { keys.push(toISO(d)); d = new Date(d.getFullYear(), d.getMonth() + 1, 1) }
+      }
     } else {
       keys = [...groups.keys()].sort() // ISO dates sort chronologically
+      if (!keys.length) keys = currentMonthDays() // empty state: this month's days
     }
 
     return keys.map((k, i) => {

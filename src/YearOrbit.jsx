@@ -84,6 +84,15 @@ export default function YearOrbit({ memories, active = true, revealed = true, on
     <div className="orbit-view">
       {media && <InfiniteMemoryCanvas media={media} active={active} revealed={revealed} onOpen={setOpen} />}
 
+      {/* empty state: nothing to orbit yet — a calm centred invite on the same
+          off-white orbit background (first pass; refine later) */}
+      {memories.length === 0 && (
+        <div className="orbit-empty">
+          <div className="orbit-empty-title">Your memories will orbit here</div>
+          <div className="orbit-empty-sub">Add your first one to begin.</div>
+        </div>
+      )}
+
       <AnimatePresence>
         {open && <OrbitModal m={open} onClose={() => setOpen(null)} />}
       </AnimatePresence>

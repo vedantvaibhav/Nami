@@ -108,6 +108,16 @@ In `App.jsx`, the `columns` memo turns `memories` into positioned columns:
 - Each column is an absolutely-positioned flex stack; cards stack **top-aligned**, even
   gap, no overlap. New cards append below.
 - **Years view** renders `<YearOrbit/>` instead of the column timeline.
+- **Empty states (canvas is never blank).** When a view would otherwise render no
+  columns, the `columns` memo falls back to a placeholder scaffold (real column geometry,
+  markers, gridlines — just no cards, so nothing is draggable/clickable):
+  - **Days** with no day columns → `currentMonthDays()` (this month, day 1→last).
+  - **Months** with zero memories → `currentYearMonths()` (this year, Jan→Dec). Once any
+    memory exists it returns to the continuous earliest-year→current-month behavior.
+  - **Years** with zero memories → a centred `.orbit-empty` invite ("Your memories will
+    orbit here") on the off-white orbit background, rendered by `YearOrbit`.
+  The scaffold keys come from `time.js` (`currentMonthDays` / `currentYearMonths`), never
+  inline date math. Adding one memory restores normal sparse/continuous behavior.
 
 **Both views are ALWAYS mounted** as stacked `.view-layer`s in `App.jsx` and cross-fade
 on zoom change. This is deliberate: remounting the 3D canvas on every Months↔Years
