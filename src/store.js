@@ -36,11 +36,10 @@ export async function makeThumbnail(blob) {
 // under `thumb:<id>` so cards/orbit never decode the full-resolution original.
 // Video/audio store only the original (no thumbnail).
 export async function saveImageMedia(id, blob, kind) {
-  await set('img:' + id, blob)
-  if (kind === 'image') {
-    const t = await makeThumbnail(blob)
-    if (t) await set('thumb:' + id, t)
-  }
+  if (kind !== 'image') { await set('img:' + id, blob); return }
+  // the original write and the thumbnail decode are independent — overlap them
+  const [, thumb] = await Promise.all([set('img:' + id, blob), makeThumbnail(blob)])
+  if (thumb) await set('thumb:' + id, thumb)
 }
 
 // Delete an image + its thumbnail, and revoke/drop any cached object URLs.
@@ -54,15 +53,19 @@ export async function deleteImage(id) {
 // storageKey ('img:<id>' | 'thumb:<id>') -> object URL
 const urlCache = new Map()
 
+// cache an object URL for a blob, deduping if a concurrent caller beat us to it
+function cacheURL(key, blob) {
+  const url = URL.createObjectURL(blob)
+  if (urlCache.has(key)) { URL.revokeObjectURL(url); return urlCache.get(key) }
+  urlCache.set(key, url)
+  return url
+}
+
 async function urlForKey(key) {
   if (urlCache.has(key)) return urlCache.get(key)
   const blob = await get(key)
   if (!blob) return null
-  const url = URL.createObjectURL(blob)
-  // a concurrent caller may have created one while we awaited — keep ONE, revoke the dupe
-  if (urlCache.has(key)) { URL.revokeObjectURL(url); return urlCache.get(key) }
-  urlCache.set(key, url)
-  return url
+  return cacheURL(key, blob)
 }
 
 // Full-resolution original — ONLY the lightbox should use this.
@@ -87,9 +90,7 @@ export async function thumbURL(id) {
     else return imageURL(id) // generation failed — show the original
   }
   if (urlCache.has(key)) return urlCache.get(key)
-  const url = URL.createObjectURL(blob)
-  urlCache.set(key, url)
-  return url
+  return cacheURL(key, blob)
 }
 
 // Revoke a single cached object URL by storage key.

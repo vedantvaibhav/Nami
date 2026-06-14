@@ -137,17 +137,18 @@ async function photoItem(m) {
 // full-res decodes and OOM-crashed the renderer ("Aw Snap"). Keyed by content,
 // so only NEW/edited memories build; deleted ones are evicted.
 const itemCache = new Map() // contentKey -> { url, width, height }
-const memKey = (m) =>
+// the per-memory content key (everything the orbit texture depends on — NOT
+// pos). Exported so YearOrbit's rebuild-trigger key uses the SAME definition,
+// instead of a copy-pasted template that could silently drift from this one.
+export const memKey = (m) =>
   `${m.id}:${m.date}:${m.title}:${m.body}:${m.color}:${(m.media || []).map((x) => x.id).join(',')}`
 
-export async function buildMediaItems(memories, onProgress) {
+export async function buildMediaItems(memories) {
   await document.fonts.ready // Newsreader must be loaded before painting quotes
   const list = memories.filter((m) => !m.draft)
   const results = new Array(list.length) // indexed: result order is stable
   const liveKeys = new Set()
   let next = 0
-  let done = 0
-  onProgress?.(0, list.length)
   // a few items in flight at once — IDB reads + image decodes overlap instead
   // of running strictly one-by-one (boot is several times faster on photos)
   const worker = async () => {
@@ -168,8 +169,6 @@ export async function buildMediaItems(memories, onProgress) {
         }
         if (item) results[i] = { ...item, memory: m }
       } catch { /* skip unreadable memory */ }
-      done += 1
-      onProgress?.(done, list.length)
     }
   }
   await Promise.all(Array.from({ length: Math.min(4, list.length) }, worker))
