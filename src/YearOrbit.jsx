@@ -48,6 +48,31 @@ function OrbitModal({ m, onClose }) {
   )
 }
 
+// Apple-style typewriter: reveal the line one character at a time after a short
+// beat, with a caret that blinks while typing and a few times after it lands.
+function TypewriterLine({ text, speed = 55, startDelay = 450 }) {
+  const [n, setN] = useState(0)
+  useEffect(() => {
+    let i = 0
+    let tick
+    const start = setTimeout(() => {
+      tick = setInterval(() => {
+        i += 1
+        setN(i)
+        if (i >= text.length) clearInterval(tick)
+      }, speed)
+    }, startDelay)
+    return () => { clearTimeout(start); clearInterval(tick) }
+  }, [text, speed, startDelay])
+  const done = n >= text.length
+  return (
+    <div className="orbit-empty-text">
+      {text.slice(0, n)}
+      <span className={`type-caret ${done ? 'type-caret-done' : ''}`} aria-hidden="true" />
+    </div>
+  )
+}
+
 export default function YearOrbit({ memories, active = true, revealed = true, onProgress, onReady }) {
   const [media, setMedia] = useState(null)
   const [open, setOpen] = useState(null)
@@ -89,6 +114,7 @@ export default function YearOrbit({ memories, active = true, revealed = true, on
       {memories.length === 0 && (
         <div className="orbit-empty">
           <img className="orbit-empty-img" src="/empty_state.png" alt="" draggable={false} />
+          <TypewriterLine text="The unscripted moments that make you pause" />
         </div>
       )}
 
