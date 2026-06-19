@@ -12,10 +12,10 @@ import { ZOOMS, markerLabel, toISO, fromISO, unitStart, currentMonthDays, curren
 
 const MARKER_H = 130 // px reserved at top for date markers
 // LIQUID (the shared switch spring — pill morph + card glide) lives in anim.js
-// The dock morph. OPEN is a smooth ease-out tween — it decelerates cleanly
-// into the final size and STOPS (no spring overshoot/tail, which read as the
-// panel "doing an extra mile" at the end). CLOSE keeps its springy feel.
-const SHELL_OPEN = { type: 'tween', duration: 0.42, ease: [0.22, 1, 0.36, 1] }
+// The dock morph. OPEN is a quick, gentle ease-out — short enough that there's
+// no lingering slow-down at the end (the long easing tail read as weird). CLOSE
+// keeps its springy feel.
+const SHELL_OPEN = { type: 'tween', duration: 0.26, ease: 'easeOut' }
 const SHELL_CLOSE = { type: 'spring', stiffness: 320, damping: 36, mass: 1 }
 // how long shellMorph stays true — must outlast the open tween / close settle
 const SHELL_MORPH_MS = 700
