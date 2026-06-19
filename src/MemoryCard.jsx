@@ -270,10 +270,10 @@ const MemoryCard = forwardRef(function MemoryCard({
     >
       <div className="card-actions">
         <button className="card-act" onClick={(e) => { e.stopPropagation(); onEdit(m.id) }} title="Edit">
-          <Icon d={icons.edit} size={13} />
+          <Icon d={icons.edit} size={15} />
         </button>
         <button className="card-act card-del" onClick={(e) => { e.stopPropagation(); onDelete(m.id) }} title="Delete">
-          <Icon d={icons.close} size={13} />
+          <Icon d={icons.close} size={15} />
         </button>
       </div>
 
