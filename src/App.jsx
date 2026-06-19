@@ -48,6 +48,7 @@ export default function App() {
   const [openId, setOpenId] = useState(null) // lightbox
   const [composerOpen, setComposerOpen] = useState(false)
   const [composerKey, setComposerKey] = useState(0) // remount composer fresh on each open
+  const [editId, setEditId] = useState(null) // memory being edited (null = adding)
   const [entered, setEntered] = useState(false) // true after the load entrance — gates the card fade-in so toggles don't re-flicker
   const toolbarRef = useRef(null)
   const composerRef = useRef(null)
@@ -537,22 +538,24 @@ export default function App() {
   })
 
   // commit a finished memory from the morphing composer form.
-  // name only -> quote; name + note -> coloured card; media -> photo/video/audio
+  // name only -> quote; name + note -> coloured card; media -> photo/video/audio.
+  // editId set => update that memory in place (keep id/color/pos); else add new.
   const addFromComposer = ({ title, body, date, media }) => {
     const hasMedia = media && media.length
-    const isQuote = !hasMedia && title && !body
-    const card = {
-      id: crypto.randomUUID(),
-      type: isQuote ? 'quote' : 'note',
-      title,
-      body,
-      date,
-      media: media || [],
-      color: nextColor(), // random, fixed — not user-changeable
+    const type = !hasMedia && title && !body ? 'quote' : 'note'
+    if (editId) {
+      setMemories((ms) => ms.map((m) => (m.id === editId ? { ...m, type, title, body, date, media: media || [] } : m)))
+    } else {
+      setMemories((ms) => [...ms, {
+        id: crypto.randomUUID(),
+        type, title, body, date,
+        media: media || [],
+        color: nextColor(), // random, fixed — not user-changeable
+      }])
     }
-    setMemories((ms) => [...ms, card])
     beginShellMorph()
     setComposerOpen(false)
+    setEditId(null)
   }
 
   // shellMorph is STATE (not a ref) and is cleared on a timer sized to the
@@ -570,15 +573,26 @@ export default function App() {
   }
 
   const openComposer = () => {
+    setEditId(null) // fresh add, not an edit
     setOpenId(null)
     setComposerKey((k) => k + 1) // fresh form each open
     beginShellMorph()
     setComposerOpen(true)
   }
 
+  // open the composer pre-filled with a card's content to edit it (CTA -> "Save")
+  const editMemory = useCallback((id) => {
+    setEditId(id)
+    setOpenId(null)
+    setComposerKey((k) => k + 1) // remount so the form picks up the editing values
+    beginShellMorph()
+    setComposerOpen(true)
+  }, [])
+
   const closeComposer = () => {
     beginShellMorph()
     setComposerOpen(false)
+    setEditId(null)
   }
 
   // measure toolbar + composer natural sizes so the shell can animate real
@@ -773,6 +787,7 @@ export default function App() {
                       onDragEnd={commitDrag}
                       onDragCancel={cancelCardDrag}
                       onDelete={removeMemory}
+                      onEdit={editMemory}
                       onOpen={setOpenId}
                     />
                     )
@@ -891,6 +906,7 @@ export default function App() {
               key={composerKey}
               active={composerOpen}
               defaultDate={anchorDate()}
+              editing={editId ? memories.find((m) => m.id === editId) : null}
               onClose={closeComposer}
               onAdd={addFromComposer}
             />

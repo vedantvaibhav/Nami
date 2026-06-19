@@ -91,6 +91,7 @@ export const icons = {
   pause: 'M6 5h4v14h-4z M14 5h4v14h-4z',
   plus: 'M12 5v14 M5 12h14',
   close: 'M18 6l-12 12 M6 6l12 12',
+  edit: 'M4 20h4l10.5 -10.5a2.1 2.1 0 0 0 -3 -3l-10.5 10.5v3z M13.5 6.5l3 3',
   calendar: 'M4 7a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v12a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2z M16 3v4 M8 3v4 M4 11h16',
   chevronL: 'M15 6l-6 6l6 6',
   chevronR: 'M9 6l6 6l-6 6',

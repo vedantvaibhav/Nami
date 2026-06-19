@@ -138,7 +138,7 @@ const MemoryCard = forwardRef(function MemoryCard({
   // no per-render DOM reads are needed to keep the drag clamped on-screen.
   manual = false, manualY = 0, yMV, getDragBounds, instantLayout = false,
   onDragStart, onDragEnd, onDragCancel,
-  onDelete, onOpen,
+  onDelete, onEdit, onOpen,
 }, ref) {
   const type = inferType(m)
   const color = COLORS[m.color] || COLORS.blue
@@ -268,7 +268,14 @@ const MemoryCard = forwardRef(function MemoryCard({
         if (type !== 'note' && !isQuote) onOpen(m.id)
       }}
     >
-      <button className="card-delete" onClick={(e) => { e.stopPropagation(); onDelete(m.id) }} title="Delete">×</button>
+      <div className="card-actions">
+        <button className="card-act" onClick={(e) => { e.stopPropagation(); onEdit(m.id) }} title="Edit">
+          <Icon d={icons.edit} size={13} />
+        </button>
+        <button className="card-act card-del" onClick={(e) => { e.stopPropagation(); onDelete(m.id) }} title="Delete">
+          <Icon d={icons.close} size={13} />
+        </button>
+      </div>
 
       {isQuote ? (
         <div className="quote-note">
