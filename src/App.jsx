@@ -900,9 +900,12 @@ export default function App() {
           <motion.div
             ref={composerRef}
             className="dock-face dock-composer"
-            animate={{ opacity: composerOpen ? 1 : 0 }}
+            animate={{ opacity: composerOpen ? 1 : 0, y: composerOpen ? 0 : 22 }}
             transition={composerOpen
-              ? { duration: 0.34, ease: 'easeOut', delay: 0.04 } // tracks the box spring so both finish together — no bare box-settle at the end
+              // the container opens first; the content then rises up from below
+              // (y) and fades in (opacity), landing as the box finishes opening
+              ? { opacity: { duration: 0.3, delay: 0.16, ease: 'easeOut' },
+                  y: { duration: 0.38, delay: 0.16, ease: [0.16, 1, 0.3, 1] } }
               : { duration: 0.1, ease: 'easeIn' }}
             style={{ pointerEvents: composerOpen ? 'auto' : 'none' }}
           >

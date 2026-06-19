@@ -396,8 +396,8 @@ body {
   white-space: nowrap;
 }
 .dock-composer {
-  /* composer face: full width, anchored to the bottom so it grows upward */
-  left: 0; bottom: 0; width: 440px;
+  /* composer face: fills the shell, anchored to the bottom so it grows upward */
+  left: 0; bottom: 0; width: 100%;
 }
 .zoombar > button:not(.add-cta) {
   width: 30px; height: 30px; border: none; border-radius: 50%;
