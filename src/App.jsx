@@ -12,10 +12,11 @@ import { ZOOMS, markerLabel, toISO, fromISO, unitStart, currentMonthDays, curren
 
 const MARKER_H = 130 // px reserved at top for date markers
 // LIQUID (the shared switch spring — pill morph + card glide) lives in anim.js
-// The dock morph — crisp, physical, essentially critically damped (no double-bounce)
-const SHELL_OPEN = { type: 'spring', stiffness: 380, damping: 38, mass: 1 }
+// The dock morph — open and close use the SAME spring, so opening feels just
+// like closing in reverse (the close feel the user likes).
 const SHELL_CLOSE = { type: 'spring', stiffness: 320, damping: 36, mass: 1 }
-// how long shellMorph stays true — must outlast the springs above (~220ms settle)
+const SHELL_OPEN = SHELL_CLOSE
+// how long shellMorph stays true — must outlast the open tween / close settle
 const SHELL_MORPH_MS = 700
 
 // A card is worth keeping if it has a title, body, or any media
@@ -48,6 +49,7 @@ export default function App() {
   const [openId, setOpenId] = useState(null) // lightbox
   const [composerOpen, setComposerOpen] = useState(false)
   const [composerKey, setComposerKey] = useState(0) // remount composer fresh on each open
+  const [editId, setEditId] = useState(null) // memory being edited (null = adding)
   const [entered, setEntered] = useState(false) // true after the load entrance — gates the card fade-in so toggles don't re-flicker
   const toolbarRef = useRef(null)
   const composerRef = useRef(null)
@@ -537,22 +539,24 @@ export default function App() {
   })
 
   // commit a finished memory from the morphing composer form.
-  // name only -> quote; name + note -> coloured card; media -> photo/video/audio
+  // name only -> quote; name + note -> coloured card; media -> photo/video/audio.
+  // editId set => update that memory in place (keep id/color/pos); else add new.
   const addFromComposer = ({ title, body, date, media }) => {
     const hasMedia = media && media.length
-    const isQuote = !hasMedia && title && !body
-    const card = {
-      id: crypto.randomUUID(),
-      type: isQuote ? 'quote' : 'note',
-      title,
-      body,
-      date,
-      media: media || [],
-      color: nextColor(), // random, fixed — not user-changeable
+    const type = !hasMedia && title && !body ? 'quote' : 'note'
+    if (editId) {
+      setMemories((ms) => ms.map((m) => (m.id === editId ? { ...m, type, title, body, date, media: media || [] } : m)))
+    } else {
+      setMemories((ms) => [...ms, {
+        id: crypto.randomUUID(),
+        type, title, body, date,
+        media: media || [],
+        color: nextColor(), // random, fixed — not user-changeable
+      }])
     }
-    setMemories((ms) => [...ms, card])
     beginShellMorph()
     setComposerOpen(false)
+    setEditId(null)
   }
 
   // shellMorph is STATE (not a ref) and is cleared on a timer sized to the
@@ -570,15 +574,26 @@ export default function App() {
   }
 
   const openComposer = () => {
+    setEditId(null) // fresh add, not an edit
     setOpenId(null)
     setComposerKey((k) => k + 1) // fresh form each open
     beginShellMorph()
     setComposerOpen(true)
   }
 
+  // open the composer pre-filled with a card's content to edit it (CTA -> "Save")
+  const editMemory = useCallback((id) => {
+    setEditId(id)
+    setOpenId(null)
+    setComposerKey((k) => k + 1) // remount so the form picks up the editing values
+    beginShellMorph()
+    setComposerOpen(true)
+  }, [])
+
   const closeComposer = () => {
     beginShellMorph()
     setComposerOpen(false)
+    setEditId(null)
   }
 
   // measure toolbar + composer natural sizes so the shell can animate real
@@ -773,6 +788,7 @@ export default function App() {
                       onDragEnd={commitDrag}
                       onDragCancel={cancelCardDrag}
                       onDelete={removeMemory}
+                      onEdit={editMemory}
                       onOpen={setOpenId}
                     />
                     )
@@ -813,7 +829,10 @@ export default function App() {
           animate={{
             y: booted ? 0 : 84,
             opacity: booted ? 1 : 0,
-            width: composerOpen ? Math.min(440, vw - 24) : dockDims.toolbarW,
+            // width never changes: the dock grows/shrinks ONLY vertically (like a
+            // bottom sheet). Animating width too made the box pinch sideways as it
+            // grew, and that lone horizontal settle at the end read as "weird".
+            width: dockDims.toolbarW,
             height: composerOpen ? dockDims.composerH : 48,
           }}
           style={{ borderRadius: 24 }}
@@ -822,10 +841,10 @@ export default function App() {
             // empty-state line have appeared (staged: photo → text ~0.9s → panel)
             y: { duration: 0.9, ease: SWIFT, delay: 1.1 },
             opacity: { duration: 0.6, ease: 'easeOut', delay: 1.1 },
-            // size animates ONLY during an open/close morph (shellMorph state —
+            // height animates ONLY during an open/close morph (shellMorph state —
             // survives mid-morph re-renders); otherwise self-measurement snaps.
             // While open, content growth (adding a photo) animates gently.
-            width: shellMorph ? (composerOpen ? SHELL_OPEN : SHELL_CLOSE) : { duration: 0 },
+            // (width is pinned to the bar's width, so it never needs a transition)
             height: shellMorph
               ? (composerOpen ? SHELL_OPEN : SHELL_CLOSE)
               : (composerOpen ? { type: 'spring', stiffness: 300, damping: 32 } : { duration: 0 }),
@@ -881,9 +900,12 @@ export default function App() {
           <motion.div
             ref={composerRef}
             className="dock-face dock-composer"
-            animate={{ opacity: composerOpen ? 1 : 0 }}
+            animate={{ opacity: composerOpen ? 1 : 0, y: composerOpen ? 0 : 40 }}
             transition={composerOpen
-              ? { duration: 0.18, ease: 'easeOut', delay: 0.07 }
+              // the container opens first; the content then rises up from below
+              // (y) and fades in (opacity), landing as the box finishes opening
+              ? { opacity: { duration: 0.34, delay: 0.24, ease: 'easeOut' },
+                  y: { duration: 0.46, delay: 0.24, ease: SWIFT } }
               : { duration: 0.1, ease: 'easeIn' }}
             style={{ pointerEvents: composerOpen ? 'auto' : 'none' }}
           >
@@ -891,6 +913,7 @@ export default function App() {
               key={composerKey}
               active={composerOpen}
               defaultDate={anchorDate()}
+              editing={editId ? memories.find((m) => m.id === editId) : null}
               onClose={closeComposer}
               onAdd={addFromComposer}
             />

@@ -104,12 +104,17 @@ function Thumb({ item, onRemove }) {
   )
 }
 
-export default function Composer({ active, defaultDate, onClose, onAdd }) {
+export default function Composer({ active, defaultDate, editing, onClose, onAdd }) {
   const todayISO = toISO(new Date())
-  const [title, setTitle] = useState('')
-  const [body, setBody] = useState('')
-  const [date, setDate] = useState(defaultDate > todayISO ? todayISO : defaultDate)
-  const [media, setMedia] = useState([])
+  // when editing an existing memory, pre-fill from it (the composer is remounted
+  // per open via `key`, so these initial values are correct each time)
+  const [title, setTitle] = useState(editing?.title || '')
+  const [body, setBody] = useState(editing?.body || '')
+  const [date, setDate] = useState(() => {
+    const d = editing?.date || defaultDate
+    return d > todayISO ? todayISO : d
+  })
+  const [media, setMedia] = useState(editing?.media || [])
   const [warn, setWarn] = useState(false)
   const [over, setOver] = useState(false)
   const [calOpen, setCalOpen] = useState(false)
@@ -229,7 +234,7 @@ export default function Composer({ active, defaultDate, onClose, onAdd }) {
         )}
       </AnimatePresence>
 
-      <button className="cmp-add" disabled={!canAdd} onClick={submit}>Add to Timeline</button>
+      <button className="cmp-add" disabled={!canAdd} onClick={submit}>{editing ? 'Save' : 'Add to Timeline'}</button>
     </div>
   )
 }

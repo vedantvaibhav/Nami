@@ -84,19 +84,25 @@ body {
   touch-action: pan-x;
 }
 .card:active { cursor: grabbing; }
-.card:hover .card-delete { opacity: 1; }
+.card:hover .card-actions { opacity: 1; }
 
 .card-title { font-size: 17px; font-weight: 500; letter-spacing: -0.01em; line-height: 1.3; overflow-wrap: anywhere; }
 .card-body { font-size: 13.5px; line-height: 1.45; color: #4A5160; margin-top: 9px; overflow-wrap: anywhere; }
 
-.card-delete {
-  position: absolute; top: 8px; right: 10px; z-index: 5;
-  width: 22px; height: 22px; border: none; border-radius: 50%;
-  background: rgba(255,255,255,0.75); color: #6B7280;
-  font-size: 14px; line-height: 1; cursor: pointer;
+/* edit + delete cluster, top-right, shown on hover */
+.card-actions {
+  position: absolute; top: 8px; right: 8px; z-index: 5;
+  display: flex; gap: 4px;
   opacity: 0; transition: opacity 0.15s;
 }
-.card-delete:hover { background: #fff; color: #DC2626; }
+.card-act {
+  width: 26px; height: 26px; padding: 0; border: none; border-radius: 50%;
+  background: rgba(255,255,255,0.8); color: #6B7280; cursor: pointer;
+  display: grid; place-items: center; /* icon perfectly centered */
+  transition: background 0.15s, color 0.15s;
+}
+.card-act:hover { background: #fff; color: #16181D; }
+.card-del:hover { color: #DC2626; }
 
 .error-badge {
   position: absolute; top: 10px; left: 12px;
@@ -390,8 +396,8 @@ body {
   white-space: nowrap;
 }
 .dock-composer {
-  /* composer face: full width, anchored to the bottom so it grows upward */
-  left: 0; bottom: 0; width: 440px;
+  /* composer face: fills the shell, anchored to the bottom so it grows upward */
+  left: 0; bottom: 0; width: 100%;
 }
 .zoombar > button:not(.add-cta) {
   width: 30px; height: 30px; border: none; border-radius: 50%;
