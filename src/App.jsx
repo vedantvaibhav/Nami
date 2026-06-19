@@ -899,7 +899,7 @@ export default function App() {
             className="dock-face dock-composer"
             animate={{ opacity: composerOpen ? 1 : 0 }}
             transition={composerOpen
-              ? { duration: 0.18, ease: 'easeOut', delay: 0.07 }
+              ? { duration: 0.34, ease: 'easeOut', delay: 0.04 } // tracks the box spring so both finish together — no bare box-settle at the end
               : { duration: 0.1, ease: 'easeIn' }}
             style={{ pointerEvents: composerOpen ? 'auto' : 'none' }}
           >
