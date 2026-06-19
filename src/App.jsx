@@ -829,7 +829,10 @@ export default function App() {
           animate={{
             y: booted ? 0 : 84,
             opacity: booted ? 1 : 0,
-            width: composerOpen ? Math.min(440, vw - 24) : dockDims.toolbarW,
+            // width never changes: the dock grows/shrinks ONLY vertically (like a
+            // bottom sheet). Animating width too made the box pinch sideways as it
+            // grew, and that lone horizontal settle at the end read as "weird".
+            width: dockDims.toolbarW,
             height: composerOpen ? dockDims.composerH : 48,
           }}
           style={{ borderRadius: 24 }}
