@@ -12,9 +12,10 @@ import { ZOOMS, markerLabel, toISO, fromISO, unitStart, currentMonthDays, curren
 
 const MARKER_H = 130 // px reserved at top for date markers
 // LIQUID (the shared switch spring — pill morph + card glide) lives in anim.js
-// The dock morph. OPEN is a quick spring with a small (0.25) bounce — a touch
-// of overshoot-and-settle, nothing draggy. CLOSE is untouched.
-const SHELL_OPEN = { type: 'spring', duration: 0.3, bounce: 0.25 }
+// The dock morph. OPEN: gentle start, accelerate through the middle, then a
+// SHORT smooth round-off at the end — fluid, no bounce, and none of the long
+// draggy deceleration tail. CLOSE is untouched.
+const SHELL_OPEN = { type: 'tween', duration: 0.26, ease: [0.4, 0, 0.7, 1] }
 const SHELL_CLOSE = { type: 'spring', stiffness: 320, damping: 36, mass: 1 }
 // how long shellMorph stays true — must outlast the open tween / close settle
 const SHELL_MORPH_MS = 700
