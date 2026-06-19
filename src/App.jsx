@@ -904,8 +904,8 @@ export default function App() {
             transition={composerOpen
               // the container opens first; the content then rises up from below
               // (y) and fades in (opacity), landing as the box finishes opening
-              ? { opacity: { duration: 0.3, delay: 0.16, ease: 'easeOut' },
-                  y: { duration: 0.38, delay: 0.16, ease: [0.16, 1, 0.3, 1] } }
+              ? { opacity: { duration: 0.3, delay: 0.24, ease: 'easeOut' },
+                  y: { duration: 0.38, delay: 0.24, ease: [0.16, 1, 0.3, 1] } }
               : { duration: 0.1, ease: 'easeIn' }}
             style={{ pointerEvents: composerOpen ? 'auto' : 'none' }}
           >
