@@ -432,21 +432,14 @@ body {
 }
 .orbit-empty-img {
   width: 100%; height: 100%; object-fit: cover; display: block;
-  /* a clear, gentle push-in on load (then it keeps breathing slowly) */
-  transform-origin: 50% 45%;
-  will-change: transform;
-  /* one slow push-in that HOLDS at the end — no reverse, no loop */
-  animation: orbit-img-zoom 10s ease-out forwards;
+  /* zoomed out a touch from a tight crop, no motion */
+  transform: scale(0.94); transform-origin: 50% 50%;
 }
-@keyframes orbit-img-zoom {
-  from { transform: scale(1.04); }
-  to   { transform: scale(1.26); }
-}
-/* the line over the image — handwriting (Caveat), deep green, upper third.
-   Staged entrance: the photo zooms first, then this fades in (delay), then the
-   bottom panel rises (see the dock entrance delay in App.jsx). */
+/* the line over the image — handwriting (Caveat), deep green, upper area.
+   Staged entrance: photo is there, then this fades in, then the bottom panel
+   rises (see the dock entrance delay in App.jsx). */
 .orbit-empty-text {
-  position: absolute; top: 30%; left: 50%; transform: translate(-50%, -50%);
+  position: absolute; top: 19%; left: 50%; transform: translate(-50%, -50%);
   width: 92%; text-align: center; white-space: nowrap;
   font-family: 'Caveat', cursive;
   font-size: clamp(22px, 3.4vw, 44px); font-weight: 600; letter-spacing: 0.01em;
