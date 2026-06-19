@@ -432,6 +432,15 @@ body {
 }
 .orbit-empty-img {
   width: 100%; height: 100%; object-fit: cover; display: block;
+  /* dissolve in on appearance — fade up + soft blur settling, ends full-bleed */
+  animation: orbit-img-in 1.1s ease-out both;
+}
+@keyframes orbit-img-in {
+  from { opacity: 0; transform: scale(1.04); filter: blur(10px); }
+  to   { opacity: 1; transform: scale(1);    filter: blur(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .orbit-empty-img { animation: none; }
 }
 /* the line over the image — handwriting (Caveat), deep green, upper area.
    Staged entrance: photo is there, then this fades in, then the bottom panel
