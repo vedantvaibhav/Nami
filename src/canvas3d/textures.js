@@ -2,7 +2,7 @@
 // notes and quotes are painted onto offscreen canvases so *everything* is a card.
 import { COLORS, thumbURL } from '../store.js'
 import { cardDateLabel } from '../time.js'
-import { inferType, firstImageId } from '../media.js'
+import { inferType } from '../media.js'
 
 const wrapText = (ctx, text, maxWidth) => {
   const words = (text || '').split(/\s+/).filter(Boolean)
@@ -123,11 +123,16 @@ const roundedPhoto = (url) =>
     img.src = url
   })
 
-async function photoItem(m) {
-  // build the orbit texture from the THUMBNAIL, never the full-res original
-  const url = await thumbURL(firstImageId(m))
-  if (!url) return null
-  return roundedPhoto(url)
+// ALL of a memory's images become separate orbit planes (built from
+// thumbnails, never the full-res originals).
+async function photoItems(m) {
+  const ids = (m.media || []).filter((x) => x.kind === 'image').map((x) => x.id)
+  const out = []
+  for (const id of ids) {
+    const url = await thumbURL(id)
+    if (url) out.push(await roundedPhoto(url))
+  }
+  return out
 }
 
 // Per-memory built-item cache (url + dims, painted/decoded ONCE). Without it,
@@ -136,7 +141,7 @@ async function photoItem(m) {
 // roundedPhoto). A few rapid deletes of real (multi-MB) photos overlapped those
 // full-res decodes and OOM-crashed the renderer ("Aw Snap"). Keyed by content,
 // so only NEW/edited memories build; deleted ones are evicted.
-const itemCache = new Map() // contentKey -> { url, width, height }
+const itemCache = new Map() // contentKey -> array of { url, width, height }
 // the per-memory content key (everything the orbit texture depends on — NOT
 // pos). Exported so YearOrbit's rebuild-trigger key uses the SAME definition,
 // instead of a copy-pasted template that could silently drift from this one.
@@ -159,15 +164,16 @@ export async function buildMediaItems(memories) {
       liveKeys.add(key)
       // one corrupt blob must never hang the whole boot — skip the item instead
       try {
-        let item = itemCache.get(key) // reuse — no re-decode/repaint
-        if (!item) {
+        let built = itemCache.get(key) // array of items, reused — no re-decode/repaint
+        if (!built) {
           const type = inferType(m)
-          if (type === 'photo') item = await photoItem(m)
-          else if (type === 'quote') item = paintQuote(m)
-          else item = paintNote(m) // notes, video, audio → painted card
-          if (item) itemCache.set(key, item)
+          if (type === 'photo') built = await photoItems(m) // one item per image
+          else if (type === 'quote') built = [paintQuote(m)]
+          else built = [paintNote(m)] // notes, video, audio → one painted card
+          built = built.filter(Boolean)
+          itemCache.set(key, built)
         }
-        if (item) results[i] = { ...item, memory: m }
+        results[i] = built.map((it) => ({ ...it, memory: m }))
       } catch { /* skip unreadable memory */ }
     }
   }
@@ -175,5 +181,5 @@ export async function buildMediaItems(memories) {
   // evict entries for memories that no longer exist (deleted / edited) so the
   // cache stays bounded by the LIVE set
   for (const k of itemCache.keys()) if (!liveKeys.has(k)) itemCache.delete(k)
-  return results.filter(Boolean)
+  return results.filter(Boolean).flat() // photo memories contribute one item per image
 }
