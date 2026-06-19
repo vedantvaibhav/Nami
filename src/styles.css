@@ -425,7 +425,7 @@ body {
 .canvas3d-container {
   position: absolute; inset: 0; touch-action: none;
 }
-/* ---- years empty state: full-bleed cover image (text baked into it) ---- */
+/* ---- years empty state: full-bleed cover image + overlaid line ---- */
 .orbit-empty {
   position: absolute; inset: 0; z-index: 1;
   pointer-events: none; user-select: none;
