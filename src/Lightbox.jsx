@@ -3,6 +3,7 @@ import { motion } from 'framer-motion'
 import { cardDateLabel } from './time.js'
 import { fmtTime, icons, inferType, seededBars } from './media.js'
 import { Icon, useImage } from './MemoryCard.jsx'
+import { revokeOriginal } from './store.js'
 
 // ---- photo: overlapping collage of prints (Amie "Meet Eric/Antoine" style) ----
 // slot layouts per image count: % positions of each print's centre + rotation.
@@ -30,6 +31,9 @@ const COLLAGE = {
 function PhotoExpand({ m }) {
   const images = m.media.filter((x) => x.kind === 'image').slice(0, 4)
   const slots = COLLAGE[images.length] || COLLAGE[4]
+  // the lightbox is the ONLY place that loads full-res originals — release
+  // those heavy object URLs when it closes (the card thumbnails stay cached)
+  useEffect(() => () => images.forEach((img) => revokeOriginal(img.id)), [])
   return (
     <div className="lb-collage">
       {images.map((img, i) => (

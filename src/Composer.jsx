@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { AnimatePresence, motion } from 'framer-motion'
-import { saveImage } from './store.js'
+import { saveImageMedia } from './store.js'
 import { toISO, fromISO } from './time.js'
 import { ACCEPT, icons, kindFromMime, MAX_SAFE_BYTES } from './media.js'
-import { Icon, useImage } from './MemoryCard.jsx'
+import { Icon, useThumb } from './MemoryCard.jsx'
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
 const WEEKDAYS = ['S', 'M', 'T', 'W', 'T', 'F', 'S']
@@ -89,7 +89,7 @@ function CalendarPopover({ value, max, anchor, onChange, onClose }) {
 }
 
 function Thumb({ item, onRemove }) {
-  const url = useImage(item.kind === 'image' ? item.id : null)
+  const url = useThumb(item.kind === 'image' ? item.id : null)
   return (
     <div className="cmp-thumb">
       {item.kind === 'image' && url ? (
@@ -140,7 +140,7 @@ export default function Composer({ active, defaultDate, onClose, onAdd }) {
         imgRoom--
       }
       const id = crypto.randomUUID()
-      await saveImage(id, file)
+      await saveImageMedia(id, file, kind) // original + (for images) a thumbnail
       setMedia((m) => [...m, { id, kind, name: file.name }])
     }
   }
@@ -184,9 +184,9 @@ export default function Composer({ active, defaultDate, onClose, onAdd }) {
       <div
         className={`cmp-upload ${over ? 'cmp-upload-over' : ''} ${media.length ? 'cmp-upload-filled' : ''}`}
         onClick={() => fileRef.current?.click()}
-        onDragOver={(e) => { e.preventDefault(); setOver(true) }}
+        onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); setOver(true) }}
         onDragLeave={() => setOver(false)}
-        onDrop={(e) => { e.preventDefault(); setOver(false); attach([...e.dataTransfer.files]) }}
+        onDrop={(e) => { e.preventDefault(); e.stopPropagation(); setOver(false); attach([...e.dataTransfer.files]) }}
       >
         {media.length > 0 ? (
           <div className="cmp-media">

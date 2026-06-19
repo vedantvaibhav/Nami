@@ -4,7 +4,7 @@ import { COLORS } from './store.js'
 import { useImage } from './MemoryCard.jsx'
 import { cardDateLabel } from './time.js'
 import { firstImageId, seededTilt } from './media.js'
-import { buildMediaItems } from './canvas3d/textures.js'
+import { buildMediaItems, memKey } from './canvas3d/textures.js'
 import InfiniteMemoryCanvas from './canvas3d/InfiniteMemoryCanvas.jsx'
 
 function OrbitModal({ m, onClose }) {
@@ -48,41 +48,38 @@ function OrbitModal({ m, onClose }) {
   )
 }
 
-export default function YearOrbit({ memories, active = true, revealed = true, onProgress, onReady }) {
+export default function YearOrbit({ memories, active = true, revealed = true }) {
   const [media, setMedia] = useState(null)
   const [open, setOpen] = useState(null)
 
   // rebuild textures only when CONTENT changes — pos (manual drag Y) is not
   // rendered here, and rebuilding every photo/note texture on each card drop
-  // was main-thread jank exactly when the drop settle animation runs
-  const contentKey = useMemo(
-    () => memories.map((m) => `${m.id}:${m.date}:${m.title}:${m.body}:${m.color}:${(m.media || []).map((x) => x.id).join(',')}`).join('|'),
-    [memories]
-  )
+  // was main-thread jank exactly when the drop settle animation runs. Uses the
+  // same memKey as the texture cache so the trigger and the cache never drift.
+  const contentKey = useMemo(() => memories.map(memKey).join('|'), [memories])
 
   useEffect(() => {
     let live = true
-    // every committed memory orbits here, regardless of its year.
-    // onProgress/onReady drive the app's boot loading bar — media building
-    // (blob decode + texture painting) is the real readiness signal.
-    buildMediaItems(memories, (done, total) => { if (live) onProgress?.(done, total) })
-      .then((built) => {
-        if (!live) return
-        setMedia(built)
-        onReady?.()
-      })
-      .catch(() => {
-        // a failed build must still lift the boot overlay — empty orbit > white hang
-        if (!live) return
-        setMedia([])
-        onReady?.()
-      })
+    // every committed memory orbits here, regardless of its year
+    buildMediaItems(memories)
+      .then((built) => { if (live) setMedia(built) })
+      .catch(() => { if (live) setMedia([]) }) // a failed build still shows an empty orbit
     return () => { live = false }
   }, [contentKey])
 
   return (
     <div className="orbit-view">
       {media && <InfiniteMemoryCanvas media={media} active={active} revealed={revealed} onOpen={setOpen} />}
+
+      {/* empty state: a full-bleed photo that slowly zooms, then the line fades
+          in, then the bottom panel rises (staged via CSS delays). The first
+          memory swaps this for the real orbit. */}
+      {memories.length === 0 && (
+        <div className="orbit-empty">
+          <img className="orbit-empty-img" src="/empty_state.png" alt="" draggable={false} />
+          <div className="orbit-empty-text">The unscripted moments that make you pause</div>
+        </div>
+      )}
 
       <AnimatePresence>
         {open && <OrbitModal m={open} onClose={() => setOpen(null)} />}

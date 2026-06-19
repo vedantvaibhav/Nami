@@ -31,6 +31,27 @@ export const unitStart = (iso, zoomId) => {
   return iso
 }
 
+// ---- empty-state scaffolding (placeholder column keys) ----
+// Every day of the CURRENT month, ISO sorted — Days view falls back to this
+// when there are no day columns to show.
+export const currentMonthDays = (today = new Date()) => {
+  const y = today.getFullYear()
+  const m = today.getMonth()
+  const last = new Date(y, m + 1, 0).getDate()
+  const out = []
+  for (let d = 1; d <= last; d++) out.push(toISO(new Date(y, m, d)))
+  return out
+}
+
+// The first of every month of the CURRENT year (Jan→Dec) — Months view falls
+// back to this when there are no memories at all.
+export const currentYearMonths = (today = new Date()) => {
+  const y = today.getFullYear()
+  const out = []
+  for (let m = 0; m < 12; m++) out.push(toISO(new Date(y, m, 1)))
+  return out
+}
+
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
 const MONTHS_SHORT = MONTHS.map((m) => m.slice(0, 3))
 
