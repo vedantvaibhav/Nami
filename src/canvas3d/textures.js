@@ -127,12 +127,15 @@ const roundedPhoto = (url) =>
 // thumbnails, never the full-res originals).
 async function photoItems(m) {
   const ids = (m.media || []).filter((x) => x.kind === 'image').map((x) => x.id)
-  const out = []
-  for (const id of ids) {
-    const url = await thumbURL(id)
-    if (url) out.push(await roundedPhoto(url))
-  }
-  return out
+  // decode a memory's images concurrently — each image's IDB read + paint
+  // overlaps the others instead of running strictly one-by-one
+  const built = await Promise.all(
+    ids.map(async (id) => {
+      const url = await thumbURL(id)
+      return url ? roundedPhoto(url) : null
+    })
+  )
+  return built.filter(Boolean)
 }
 
 // Per-memory built-item cache (url + dims, painted/decoded ONCE). Without it,

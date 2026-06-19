@@ -841,10 +841,10 @@ export default function App() {
             // empty-state line have appeared (staged: photo → text ~0.9s → panel)
             y: { duration: 0.9, ease: SWIFT, delay: 1.1 },
             opacity: { duration: 0.6, ease: 'easeOut', delay: 1.1 },
-            // size animates ONLY during an open/close morph (shellMorph state —
+            // height animates ONLY during an open/close morph (shellMorph state —
             // survives mid-morph re-renders); otherwise self-measurement snaps.
             // While open, content growth (adding a photo) animates gently.
-            width: shellMorph ? (composerOpen ? SHELL_OPEN : SHELL_CLOSE) : { duration: 0 },
+            // (width is pinned to the bar's width, so it never needs a transition)
             height: shellMorph
               ? (composerOpen ? SHELL_OPEN : SHELL_CLOSE)
               : (composerOpen ? { type: 'spring', stiffness: 300, damping: 32 } : { duration: 0 }),
@@ -905,7 +905,7 @@ export default function App() {
               // the container opens first; the content then rises up from below
               // (y) and fades in (opacity), landing as the box finishes opening
               ? { opacity: { duration: 0.34, delay: 0.24, ease: 'easeOut' },
-                  y: { duration: 0.46, delay: 0.24, ease: [0.16, 1, 0.3, 1] } }
+                  y: { duration: 0.46, delay: 0.24, ease: SWIFT } }
               : { duration: 0.1, ease: 'easeIn' }}
             style={{ pointerEvents: composerOpen ? 'auto' : 'none' }}
           >
