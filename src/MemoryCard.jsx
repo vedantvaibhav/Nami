@@ -1,7 +1,7 @@
 import { forwardRef, memo, useEffect, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
 import { COLORS, imageURL, thumbURL } from './store.js'
-import { icons, inferType, seededBars, seededTilt, seedFrac, videoThumb } from './media.js'
+import { icons, inferType, seededBars, seededTilt, seedFrac } from './media.js'
 import { SWIFT, LIQUID } from './anim.js'
 
 // resolve an object URL via a store getter (imageURL = full-res original,
@@ -78,16 +78,12 @@ function PhotoBlock({ m }) {
 function VideoBlock({ m }) {
   const video = m.media.find((x) => x.kind === 'video')
   const url = useImage(video?.id)
-  const [thumb, setThumb] = useState(null)
-  useEffect(() => {
-    let live = true
-    if (video && url) videoThumb(video.id, url).then((t) => live && setThumb(t))
-    return () => { live = false }
-  }, [video?.id, url])
+  // play inline like a live photo: muted + looping autoplay, no controls
   return (
     <div className="video-thumb">
-      {thumb ? <img src={thumb} alt={m.title || 'video'} draggable={false} /> : <div className="video-thumb-empty" />}
-      <span className="play-badge"><Icon d={icons.play} size={18} /></span>
+      {url
+        ? <video src={url} muted loop autoPlay playsInline draggable={false} />
+        : <div className="video-thumb-empty" />}
     </div>
   )
 }

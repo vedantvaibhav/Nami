@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { AnimatePresence, motion } from 'framer-motion'
-import { saveImageMedia } from './store.js'
+import { saveImageMedia, COLORS, COLOR_KEYS, randomColorKey } from './store.js'
 import { toISO, fromISO } from './time.js'
 import { ACCEPT, icons, kindFromMime, MAX_SAFE_BYTES } from './media.js'
 import { Icon, useThumb } from './MemoryCard.jsx'
@@ -115,6 +115,9 @@ export default function Composer({ active, defaultDate, editing, onClose, onAdd 
     return d > todayISO ? todayISO : d
   })
   const [media, setMedia] = useState(editing?.media || [])
+  // editing keeps the card's colour; a new card defaults to a random one (picked
+  // once on open), and the swatch row lets the user change it either way
+  const [color, setColor] = useState(() => editing?.color || randomColorKey())
   const [warn, setWarn] = useState(false)
   const [over, setOver] = useState(false)
   const [calOpen, setCalOpen] = useState(false)
@@ -153,7 +156,7 @@ export default function Composer({ active, defaultDate, editing, onClose, onAdd 
   const canAdd = title.trim() || media.length
   const submit = () => {
     if (!canAdd) return
-    onAdd({ title: title.trim(), body: body.trim(), date, media })
+    onAdd({ title: title.trim(), body: body.trim(), date, media, color })
   }
   const onKeyDown = (e) => {
     if (e.key === 'Escape') onClose()
@@ -233,6 +236,20 @@ export default function Composer({ active, defaultDate, editing, onClose, onAdd 
           />
         )}
       </AnimatePresence>
+
+      {/* card colour */}
+      <div className="cmp-colors">
+        {COLOR_KEYS.map((k) => (
+          <button
+            key={k}
+            type="button"
+            className={`cmp-swatch ${color === k ? 'cmp-swatch-sel' : ''}`}
+            style={{ background: COLORS[k].bg, color: COLORS[k].text }}
+            onClick={() => setColor(k)}
+            title={k}
+          />
+        ))}
+      </div>
 
       <button className="cmp-add" disabled={!canAdd} onClick={submit}>{editing ? 'Save' : 'Add to Timeline'}</button>
     </div>
