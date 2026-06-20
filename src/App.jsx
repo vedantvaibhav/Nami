@@ -448,21 +448,21 @@ export default function App() {
     const h = cardHeight(id)
     const maxTop = maxTopFor(id)
 
-    // other cards' occupied [top, bottom] bands for this column/view — read from
-    // the LIVE DOM (offsetTop/offsetHeight), not stale state, so no-overlap holds
-    // on the very first drag of a column and with freshly-loaded image heights
-    const bands = []
+    // other cards in this column/view — read from the LIVE DOM (offsetTop/
+    // offsetHeight), not stale state, so placement holds on a column's very first
+    // drag and with freshly-loaded image heights.
+    const others = []
     for (const it of colItemsFor(id)) {
       if (it.id === id) continue
-      const top = cardRefs.current.get(it.id)?.offsetTop ?? it.pos?.[v]
-      if (top == null) continue
-      bands.push({ top, bottom: top + cardHeight(it.id) })
+      const from = cardRefs.current.get(it.id)?.offsetTop ?? it.pos?.[v]
+      if (from == null) continue
+      others.push({ id: it.id, from, hh: cardHeight(it.id) })
     }
 
-    // candidate positions: the column top, the bottom of the band, and ABUTTING
-    // each neighbour with MIN_GAP of breathing room (just below / just above).
-    // The same list drives the magnetic snap AND the no-overlap resolve.
-    const near = bands.flatMap((b) => [b.bottom + MIN_GAP, b.top - h - MIN_GAP])
+    // gentle magnetic snap: if the drop lands within SNAP_THRESHOLD of the column
+    // top or of ABUTTING a neighbour (just above / just below, with MIN_GAP of
+    // breathing room), click to that tidy position.
+    const near = others.flatMap((o) => [o.from + o.hh + MIN_GAP, o.from - h - MIN_GAP])
     let y = raw
     let best = null
     for (const a of [0, ...near]) {
@@ -472,23 +472,41 @@ export default function App() {
     if (best) y = best.a
     y = Math.min(Math.max(0, y), maxTop) // never off-screen / under the dock
 
-    // no overlap: a card must keep at least MIN_GAP from every neighbour. If it
-    // doesn't, move to the nearest candidate that does.
-    const clear = (p) => p >= 0 && p <= maxTop && !bands.some((b) => p < b.bottom + MIN_GAP && p + h > b.top - MIN_GAP)
-    if (!clear(y)) {
-      const ok = [0, maxTop, ...near].filter(clear).sort((a, b) => Math.abs(a - y) - Math.abs(b - y))
-      if (ok.length) y = ok[0]
+    // PUSH, don't bounce. The dragged card stays where you let go; any neighbour
+    // it now overlaps moves OUT OF THE WAY — down if it sits below the drop, up if
+    // above — and the shove cascades to that card's own neighbours. (The old logic
+    // relocated the DRAGGED card to a free slot, which is exactly what made a drop
+    // feel "stuck" — you couldn't drop a card where another one already was.)
+    const dragMid = y + h / 2
+    const below = others.filter((o) => o.from + o.hh / 2 >= dragMid).sort((a, b) => a.from - b.from)
+    const above = others.filter((o) => o.from + o.hh / 2 < dragMid).sort((a, b) => b.from - a.from)
+    const tops = new Map([[id, y]])
+    let floor = y + h + MIN_GAP // lowest top the next card-down may take
+    for (const o of below) {
+      const t = Math.min(Math.max(o.from, floor), maxTopFor(o.id))
+      tops.set(o.id, t)
+      floor = t + o.hh + MIN_GAP
+    }
+    let ceil = y - MIN_GAP // highest bottom the next card-up may take
+    for (const o of above) {
+      const t = Math.max(Math.min(o.from, ceil - o.hh), 0)
+      tops.set(o.id, t)
+      ceil = t - MIN_GAP
     }
 
-    // commit the new top SYNCHRONOUSLY (flushSync), then set the transient offset
-    // so the card stays exactly where it was dropped, and glide that offset to 0.
-    // Doing the top commit in the same frame as the offset avoids the one-frame
-    // flash (the "glitch") you'd get if `top` (state) and the transform updated on
-    // different frames.
-    const mv = cardYMV(id)
-    flushSync(() => setMemories((ms) => ms.map((m) => (m.id === id ? { ...m, pos: { ...(m.pos || {}), [v]: y } } : m))))
-    mv.set(raw - y)
-    animate(mv, 0, CARD_SETTLE)
+    // commit every moved card's top SYNCHRONOUSLY (flushSync), then glide each from
+    // where it was to its new top via the transient yMV offset — the same one-frame
+    // mechanism the dragged card uses, so pushed neighbours slide rather than
+    // teleport. Same-frame top+offset avoids the one-frame flash (the "glitch").
+    flushSync(() => setMemories((ms) => ms.map((m) =>
+      tops.has(m.id) ? { ...m, pos: { ...(m.pos || {}), [v]: tops.get(m.id) } } : m
+    )))
+    for (const [cid, t] of tops) {
+      const fromTop = cid === id ? raw : others.find((o) => o.id === cid).from
+      const mv = cardYMV(cid)
+      mv.set(fromTop - t)
+      animate(mv, 0, CARD_SETTLE)
+    }
     navigator.vibrate?.(8) // silent haptic tick on supported devices — no audio
     dragActive.current = false
   }, [cardYMV])
