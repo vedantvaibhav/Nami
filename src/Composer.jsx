@@ -67,7 +67,7 @@ function CalendarPopover({ value, max, anchor, onChange, onClose }) {
         <div className="cal-grid cal-weekdays">
           {WEEKDAYS.map((w, i) => <span key={i} className="cal-wd">{w}</span>)}
         </div>
-        <div className="cal-grid">
+        <div className="cal-grid cal-days">
           {cells.map((d, i) =>
             d === null ? (
               <span key={i} />
