@@ -50,33 +50,6 @@ export const seededBars = (id, count = 28) => {
   return bars
 }
 
-// First-frame thumbnail for video blobs (hidden <video> -> canvas)
-const thumbCache = new Map()
-export const videoThumb = (mediaId, url) => {
-  if (thumbCache.has(mediaId)) return thumbCache.get(mediaId)
-  const p = new Promise((resolve) => {
-    const v = document.createElement('video')
-    v.muted = true
-    v.playsInline = true
-    v.preload = 'auto'
-    v.src = url
-    const fail = () => resolve(null)
-    v.addEventListener('loadeddata', () => { v.currentTime = 0.01 }, { once: true })
-    v.addEventListener('seeked', () => {
-      try {
-        const c = document.createElement('canvas')
-        c.width = v.videoWidth || 640
-        c.height = v.videoHeight || 360
-        c.getContext('2d').drawImage(v, 0, 0, c.width, c.height)
-        resolve(c.toDataURL('image/jpeg', 0.82))
-      } catch { fail() }
-    }, { once: true })
-    v.addEventListener('error', fail, { once: true })
-  })
-  thumbCache.set(mediaId, p)
-  return p
-}
-
 export const fmtTime = (s) => {
   if (!Number.isFinite(s)) return '0:00'
   const m = Math.floor(s / 60)

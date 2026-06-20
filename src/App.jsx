@@ -541,17 +541,17 @@ export default function App() {
   // commit a finished memory from the morphing composer form.
   // name only -> quote; name + note -> coloured card; media -> photo/video/audio.
   // editId set => update that memory in place (keep id/color/pos); else add new.
-  const addFromComposer = ({ title, body, date, media }) => {
+  const addFromComposer = ({ title, body, date, media, color }) => {
     const hasMedia = media && media.length
     const type = !hasMedia && title && !body ? 'quote' : 'note'
     if (editId) {
-      setMemories((ms) => ms.map((m) => (m.id === editId ? { ...m, type, title, body, date, media: media || [] } : m)))
+      setMemories((ms) => ms.map((m) => (m.id === editId ? { ...m, type, title, body, date, media: media || [], color } : m)))
     } else {
       setMemories((ms) => [...ms, {
         id: crypto.randomUUID(),
         type, title, body, date,
         media: media || [],
-        color: nextColor(), // random, fixed — not user-changeable
+        color: color || nextColor(), // picked in the composer; fall back to random
       }])
     }
     beginShellMorph()
