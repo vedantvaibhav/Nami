@@ -43,6 +43,16 @@ const MIN_GAP = 14                 // minimum gap kept between two cards (matche
 // physically impossible for the drop to bounce.
 const CARD_SETTLE = { type: 'tween', duration: 0.13, ease: [0.25, 1, 0.5, 1] }
 
+// A month gathers far more memories than a day, so the Months view collates each
+// column to at most a few cards — otherwise a busy month stacks past the bottom
+// of the viewport (below the dock). Days show everything.
+const MONTHS_VIEW_MAX = 3
+const byDate = (a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0)
+const collateColumn = (items, view) => {
+  const sorted = items.slice().sort(byDate)
+  return view === 'months' ? sorted.slice(0, MONTHS_VIEW_MAX) : sorted
+}
+
 export default function App() {
   const [memories, setMemories] = useState(null)
   const [zoomIdx, setZoomIdx] = useState(2) // open in Years view on load
@@ -189,8 +199,8 @@ export default function App() {
     }
 
     return keys.map((k, i) => {
-      // chronological within a column (months can span several dates)
-      const items = (groups.get(k) || []).slice().sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0))
+      // chronological within a column; Months collates to the first few (see collateColumn)
+      const items = collateColumn(groups.get(k) || [], view2d)
       return { key: k, colX: i * COL_W, colW: COL_W, items }
     })
   }, [memories, view2d])
@@ -392,7 +402,8 @@ export default function App() {
     const me = ms.find((m) => m.id === id)
     if (!me) return []
     const k = unitStart(me.date, view2dRef.current)
-    return ms.filter((m) => unitStart(m.date, view2dRef.current) === k)
+    // same collation as the rendered column, so drag only considers visible cards
+    return collateColumn(ms.filter((m) => unitStart(m.date, view2dRef.current) === k), view2dRef.current)
   }
 
   // Per-card TRANSIENT drag offset (0 at rest). The card's pointer drag writes
