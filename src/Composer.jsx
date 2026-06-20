@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { AnimatePresence, motion } from 'framer-motion'
-import { saveImageMedia, COLORS, COLOR_KEYS } from './store.js'
+import { saveImageMedia, COLORS, COLOR_KEYS, randomColorKey } from './store.js'
 import { toISO, fromISO } from './time.js'
 import { ACCEPT, icons, kindFromMime, MAX_SAFE_BYTES } from './media.js'
 import { Icon, useThumb } from './MemoryCard.jsx'
@@ -117,7 +117,7 @@ export default function Composer({ active, defaultDate, editing, onClose, onAdd 
   const [media, setMedia] = useState(editing?.media || [])
   // editing keeps the card's colour; a new card defaults to a random one (picked
   // once on open), and the swatch row lets the user change it either way
-  const [color, setColor] = useState(() => editing?.color || COLOR_KEYS[Math.floor(Math.random() * COLOR_KEYS.length)])
+  const [color, setColor] = useState(() => editing?.color || randomColorKey())
   const [warn, setWarn] = useState(false)
   const [over, setOver] = useState(false)
   const [calOpen, setCalOpen] = useState(false)

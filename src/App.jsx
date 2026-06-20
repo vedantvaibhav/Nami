@@ -6,7 +6,7 @@ import MemoryCard from './MemoryCard.jsx'
 import YearOrbit from './YearOrbit.jsx'
 import Lightbox from './Lightbox.jsx'
 import Composer from './Composer.jsx'
-import { loadMemories, saveMemories, saveImageMedia, deleteImage, COLOR_KEYS } from './store.js'
+import { loadMemories, saveMemories, saveImageMedia, deleteImage, randomColorKey } from './store.js'
 import { kindFromMime, MAX_SAFE_BYTES } from './media.js'
 import { ZOOMS, markerLabel, toISO, fromISO, unitStart, currentMonthDays, currentYearMonths } from './time.js'
 
@@ -438,9 +438,9 @@ export default function App() {
 
   // Commit a drag: free vertical placement with a GENTLE magnetic snap so the
   // card abuts a neighbour (sits just above/below it, never aligned-on-top),
-  // clamped on-screen, then a final no-overlap resolve so cards can NEVER cover
-  // each other. offsetY is the pointer's clamped offset at drop; we move it
-  // into pos[view] and slide yMV → 0 (fast tween — cannot bounce).
+  // clamped on-screen, then PUSH any overlapped neighbour out of the way (cascading)
+  // so cards can NEVER cover each other. offsetY is the pointer's clamped offset at
+  // drop; we move it into pos[view] and slide yMV → 0 (fast tween — cannot bounce).
   const commitDrag = useCallback((id, offsetY) => {
     const v = view2dRef.current
     const base = memoriesRef.current?.find((m) => m.id === id)?.pos?.[v] ?? 0
@@ -480,17 +480,19 @@ export default function App() {
     const dragMid = y + h / 2
     const below = others.filter((o) => o.from + o.hh / 2 >= dragMid).sort((a, b) => a.from - b.from)
     const above = others.filter((o) => o.from + o.hh / 2 < dragMid).sort((a, b) => b.from - a.from)
-    const tops = new Map([[id, y]])
+    // each entry holds { from: where the card is now, to: its resolved top }, so
+    // the glide loop below needs no second lookup.
+    const tops = new Map([[id, { from: raw, to: y }]])
     let floor = y + h + MIN_GAP // lowest top the next card-down may take
     for (const o of below) {
       const t = Math.min(Math.max(o.from, floor), maxTopFor(o.id))
-      tops.set(o.id, t)
+      tops.set(o.id, { from: o.from, to: t })
       floor = t + o.hh + MIN_GAP
     }
     let ceil = y - MIN_GAP // highest bottom the next card-up may take
     for (const o of above) {
       const t = Math.max(Math.min(o.from, ceil - o.hh), 0)
-      tops.set(o.id, t)
+      tops.set(o.id, { from: o.from, to: t })
       ceil = t - MIN_GAP
     }
 
@@ -499,12 +501,11 @@ export default function App() {
     // mechanism the dragged card uses, so pushed neighbours slide rather than
     // teleport. Same-frame top+offset avoids the one-frame flash (the "glitch").
     flushSync(() => setMemories((ms) => ms.map((m) =>
-      tops.has(m.id) ? { ...m, pos: { ...(m.pos || {}), [v]: tops.get(m.id) } } : m
+      tops.has(m.id) ? { ...m, pos: { ...(m.pos || {}), [v]: tops.get(m.id).to } } : m
     )))
-    for (const [cid, t] of tops) {
-      const fromTop = cid === id ? raw : others.find((o) => o.id === cid).from
+    for (const [cid, { from, to }] of tops) {
       const mv = cardYMV(cid)
-      mv.set(fromTop - t)
+      mv.set(from - to)
       animate(mv, 0, CARD_SETTLE)
     }
     navigator.vibrate?.(8) // silent haptic tick on supported devices — no audio
@@ -538,8 +539,6 @@ export default function App() {
     }))
   }, [memories, view2d])
 
-  // completely random pastel from the palette; fixed once assigned
-  const nextColor = () => COLOR_KEYS[Math.floor(Math.random() * COLOR_KEYS.length)]
   const todayISO = () => toISO(new Date())
 
 
@@ -552,7 +551,7 @@ export default function App() {
     title: '',
     body: '',
     date,
-    color: nextColor(),
+    color: randomColorKey(),
     media: [],
   })
 
@@ -569,7 +568,7 @@ export default function App() {
         id: crypto.randomUUID(),
         type, title, body, date,
         media: media || [],
-        color: color || nextColor(), // picked in the composer; fall back to random
+        color: color || randomColorKey(), // picked in the composer; fall back to random
       }])
     }
     beginShellMorph()

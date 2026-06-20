@@ -113,3 +113,4 @@ export const COLORS = {
 }
 
 export const COLOR_KEYS = Object.keys(COLORS)
+export const randomColorKey = () => COLOR_KEYS[Math.floor(Math.random() * COLOR_KEYS.length)]
