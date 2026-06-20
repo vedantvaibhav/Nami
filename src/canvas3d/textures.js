@@ -1,6 +1,6 @@
 // Builds MediaItems for the 3D canvas: photos use their stored blobs,
 // notes and quotes are painted onto offscreen canvases so *everything* is a card.
-import { COLORS, thumbURL } from '../store.js'
+import { COLORS, thumbURL, imageURL } from '../store.js'
 import { cardDateLabel } from '../time.js'
 import { inferType } from '../media.js'
 
@@ -123,6 +123,32 @@ const roundedPhoto = (url) =>
     img.src = url
   })
 
+// read a video's natural size from its metadata (for the plane's aspect ratio)
+const videoDims = (url) =>
+  new Promise((resolve) => {
+    const v = document.createElement('video')
+    v.preload = 'metadata'
+    v.muted = true
+    v.onloadedmetadata = () => resolve({ w: v.videoWidth || 4, h: v.videoHeight || 3 })
+    v.onerror = () => resolve({ w: 4, h: 3 })
+    v.src = url
+  })
+
+// ALL of a memory's videos become orbit planes that PLAY — the actual
+// VideoTexture is built in the canvas (shared across every tiled instance); here
+// we just hand over the blob url + natural size. isVideo routes it in MediaPlane.
+async function videoItems(m) {
+  const ids = (m.media || []).filter((x) => x.kind === 'video').map((x) => x.id)
+  const out = []
+  for (const id of ids) {
+    const url = await imageURL(id) // original video blob — no thumbnail for video
+    if (!url) continue
+    const { w, h } = await videoDims(url)
+    out.push({ url, width: w, height: h, isVideo: true })
+  }
+  return out
+}
+
 // ALL of a memory's images become separate orbit planes (built from
 // thumbnails, never the full-res originals).
 async function photoItems(m) {
@@ -171,8 +197,9 @@ export async function buildMediaItems(memories) {
         if (!built) {
           const type = inferType(m)
           if (type === 'photo') built = await photoItems(m) // one item per image
+          else if (type === 'video') built = await videoItems(m) // playing video plane(s)
           else if (type === 'quote') built = [paintQuote(m)]
-          else built = [paintNote(m)] // notes, video, audio → one painted card
+          else built = [paintNote(m)] // notes, audio → one painted card
           built = built.filter(Boolean)
           itemCache.set(key, built)
         }
