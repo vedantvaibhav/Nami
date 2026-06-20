@@ -54,6 +54,9 @@ function getTexture(url, onLoad) {
   return texture
 }
 
+// a cached texture is a video texture iff its backing image is a <video> element
+const videoEl = (tex) => (tex?.image?.tagName === 'VIDEO' ? tex.image : null)
+
 // One shared VideoTexture per video url — a single <video> decodes once and every
 // tiled plane samples it (muted, looping, autoplay). Cached in the SAME map as
 // image textures so the existing dispose-by-url pass cleans it up too.
@@ -65,7 +68,6 @@ function getVideoTexture(url, onReady) {
   video.muted = true
   video.loop = true
   video.playsInline = true
-  video.autoplay = true
   video.play?.().catch(() => {})
   const texture = new THREE.VideoTexture(video) // auto-updates each rendered frame
   texture.minFilter = THREE.LinearFilter
@@ -409,8 +411,8 @@ export default function InfiniteMemoryCanvas({ media, active = true, revealed = 
   // is parked too) so they don't decode in the background; resume on return.
   useEffect(() => {
     for (const tex of textureCache.values()) {
-      const vid = tex.image
-      if (vid?.tagName !== 'VIDEO') continue
+      const vid = videoEl(tex)
+      if (!vid) continue
       if (active) vid.play?.().catch(() => {})
       else vid.pause?.()
     }
@@ -424,8 +426,8 @@ export default function InfiniteMemoryCanvas({ media, active = true, revealed = 
     const t = setTimeout(() => {
       for (const [url, tex] of textureCache) {
         if (live.has(url)) continue
-        const vid = tex.image
-        if (vid?.tagName === 'VIDEO') { vid.pause(); vid.removeAttribute('src'); vid.load() } // release the decoder
+        const vid = videoEl(tex)
+        if (vid) { vid.pause(); vid.removeAttribute('src'); vid.load() } // release the decoder
         tex.dispose?.()
         textureCache.delete(url)
       }
