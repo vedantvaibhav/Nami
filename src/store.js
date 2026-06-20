@@ -16,7 +16,10 @@ export async function saveMemories(list) {
 // Returns null if it can't be decoded (caller falls back to the original).
 export async function makeThumbnail(blob) {
   try {
-    const bmp = await createImageBitmap(blob)
+    // honour EXIF orientation so the thumbnail matches the upright full-res image
+    // (an <img> auto-orients; createImageBitmap does NOT unless asked) — otherwise
+    // portrait phone photos render sideways in the cards/orbit and look distorted.
+    const bmp = await createImageBitmap(blob, { imageOrientation: 'from-image' })
     const scale = Math.min(1, THUMB_MAX / Math.max(bmp.width, bmp.height))
     const w = Math.max(1, Math.round(bmp.width * scale))
     const h = Math.max(1, Math.round(bmp.height * scale))
