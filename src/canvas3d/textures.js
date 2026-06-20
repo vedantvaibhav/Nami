@@ -98,6 +98,8 @@ function paintQuote(m) {
   return { url: c.toDataURL('image/png'), width: W, height: H }
 }
 
+const FALLBACK_DIMS = { w: 4, h: 3 } // default plane aspect when a real size can't be read
+
 // ONE image load per photo: read the natural dimensions and draw the rounded-
 // rect clipped copy (rounded corners like the painted cards) from the same
 // decode, capped at 1024px so the texture stays sane
@@ -105,8 +107,8 @@ const roundedPhoto = (url) =>
   new Promise((resolve) => {
     const img = new Image()
     img.onload = () => {
-      const w = img.naturalWidth || 4
-      const h = img.naturalHeight || 3
+      const w = img.naturalWidth || FALLBACK_DIMS.w
+      const h = img.naturalHeight || FALLBACK_DIMS.h
       const scale = Math.min(1, 1024 / Math.max(w, h))
       const cw = Math.max(1, Math.round(w * scale))
       const ch = Math.max(1, Math.round(h * scale))
@@ -119,18 +121,20 @@ const roundedPhoto = (url) =>
       ctx.drawImage(img, 0, 0, cw, ch)
       resolve({ url: c.toDataURL('image/png'), width: w, height: h })
     }
-    img.onerror = () => resolve({ url, width: 4, height: 3 })
+    img.onerror = () => resolve({ url, width: FALLBACK_DIMS.w, height: FALLBACK_DIMS.h })
     img.src = url
   })
 
-// read a video's natural size from its metadata (for the plane's aspect ratio)
+// read a video's natural size from its metadata (for the plane's aspect ratio),
+// then release the probe element so it doesn't hold a decoder open
 const videoDims = (url) =>
   new Promise((resolve) => {
     const v = document.createElement('video')
     v.preload = 'metadata'
     v.muted = true
-    v.onloadedmetadata = () => resolve({ w: v.videoWidth || 4, h: v.videoHeight || 3 })
-    v.onerror = () => resolve({ w: 4, h: 3 })
+    const done = (dims) => { v.removeAttribute('src'); v.load(); resolve(dims) }
+    v.onloadedmetadata = () => done({ w: v.videoWidth || FALLBACK_DIMS.w, h: v.videoHeight || FALLBACK_DIMS.h })
+    v.onerror = () => done(FALLBACK_DIMS)
     v.src = url
   })
 
