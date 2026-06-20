@@ -270,6 +270,9 @@ body {
 .cal-nav:disabled:hover { background: transparent; }
 .cal-month { font-size: 15px; font-weight: 600; color: #16181D; }
 .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
+/* always 6 fixed-height rows: an empty (padded) row holds 34px like a day row,
+   so the popover height never changes between 5- and 6-row months */
+.cal-days { grid-template-rows: repeat(6, 34px); }
 .cal-weekdays { margin-bottom: 4px; }
 .cal-wd {
   display: grid; place-items: center; height: 28px;

@@ -1,6 +1,6 @@
 // Builds MediaItems for the 3D canvas: photos use their stored blobs,
 // notes and quotes are painted onto offscreen canvases so *everything* is a card.
-import { COLORS, thumbURL } from '../store.js'
+import { COLORS, thumbURL, imageURL } from '../store.js'
 import { cardDateLabel } from '../time.js'
 import { inferType } from '../media.js'
 
@@ -98,6 +98,8 @@ function paintQuote(m) {
   return { url: c.toDataURL('image/png'), width: W, height: H }
 }
 
+const FALLBACK_DIMS = { w: 4, h: 3 } // default plane aspect when a real size can't be read
+
 // ONE image load per photo: read the natural dimensions and draw the rounded-
 // rect clipped copy (rounded corners like the painted cards) from the same
 // decode, capped at 1024px so the texture stays sane
@@ -105,8 +107,8 @@ const roundedPhoto = (url) =>
   new Promise((resolve) => {
     const img = new Image()
     img.onload = () => {
-      const w = img.naturalWidth || 4
-      const h = img.naturalHeight || 3
+      const w = img.naturalWidth || FALLBACK_DIMS.w
+      const h = img.naturalHeight || FALLBACK_DIMS.h
       const scale = Math.min(1, 1024 / Math.max(w, h))
       const cw = Math.max(1, Math.round(w * scale))
       const ch = Math.max(1, Math.round(h * scale))
@@ -119,9 +121,37 @@ const roundedPhoto = (url) =>
       ctx.drawImage(img, 0, 0, cw, ch)
       resolve({ url: c.toDataURL('image/png'), width: w, height: h })
     }
-    img.onerror = () => resolve({ url, width: 4, height: 3 })
+    img.onerror = () => resolve({ url, width: FALLBACK_DIMS.w, height: FALLBACK_DIMS.h })
     img.src = url
   })
+
+// read a video's natural size from its metadata (for the plane's aspect ratio),
+// then release the probe element so it doesn't hold a decoder open
+const videoDims = (url) =>
+  new Promise((resolve) => {
+    const v = document.createElement('video')
+    v.preload = 'metadata'
+    v.muted = true
+    const done = (dims) => { v.removeAttribute('src'); v.load(); resolve(dims) }
+    v.onloadedmetadata = () => done({ w: v.videoWidth || FALLBACK_DIMS.w, h: v.videoHeight || FALLBACK_DIMS.h })
+    v.onerror = () => done(FALLBACK_DIMS)
+    v.src = url
+  })
+
+// ALL of a memory's videos become orbit planes that PLAY — the actual
+// VideoTexture is built in the canvas (shared across every tiled instance); here
+// we just hand over the blob url + natural size. isVideo routes it in MediaPlane.
+async function videoItems(m) {
+  const ids = (m.media || []).filter((x) => x.kind === 'video').map((x) => x.id)
+  const out = []
+  for (const id of ids) {
+    const url = await imageURL(id) // original video blob — no thumbnail for video
+    if (!url) continue
+    const { w, h } = await videoDims(url)
+    out.push({ url, width: w, height: h, isVideo: true })
+  }
+  return out
+}
 
 // ALL of a memory's images become separate orbit planes (built from
 // thumbnails, never the full-res originals).
@@ -171,8 +201,9 @@ export async function buildMediaItems(memories) {
         if (!built) {
           const type = inferType(m)
           if (type === 'photo') built = await photoItems(m) // one item per image
+          else if (type === 'video') built = await videoItems(m) // playing video plane(s)
           else if (type === 'quote') built = [paintQuote(m)]
-          else built = [paintNote(m)] // notes, video, audio → one painted card
+          else built = [paintNote(m)] // notes, audio → one painted card
           built = built.filter(Boolean)
           itemCache.set(key, built)
         }

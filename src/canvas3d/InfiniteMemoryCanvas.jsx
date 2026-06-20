@@ -54,6 +54,31 @@ function getTexture(url, onLoad) {
   return texture
 }
 
+// a cached texture is a video texture iff its backing image is a <video> element
+const videoEl = (tex) => (tex?.image?.tagName === 'VIDEO' ? tex.image : null)
+
+// One shared VideoTexture per video url — a single <video> decodes once and every
+// tiled plane samples it (muted, looping, autoplay). Cached in the SAME map as
+// image textures so the existing dispose-by-url pass cleans it up too.
+function getVideoTexture(url, onReady) {
+  const existing = textureCache.get(url)
+  if (existing) { onReady?.(existing); return existing }
+  const video = document.createElement('video')
+  video.src = url
+  video.muted = true
+  video.loop = true
+  video.playsInline = true
+  video.play?.().catch(() => {})
+  const texture = new THREE.VideoTexture(video) // auto-updates each rendered frame
+  texture.minFilter = THREE.LinearFilter
+  texture.magFilter = THREE.LinearFilter
+  texture.generateMipmaps = false
+  texture.colorSpace = THREE.SRGBColorSpace
+  textureCache.set(url, texture)
+  onReady?.(texture)
+  return texture
+}
+
 function MediaPlane({ position, scale, item, chunkCx, chunkCy, chunkCz, cameraGridRef, onOpen, introDelay = 0 }) {
   const meshRef = useRef(null)
   const materialRef = useRef(null)
@@ -133,7 +158,7 @@ function MediaPlane({ position, scale, item, chunkCx, chunkCy, chunkCz, cameraGr
 
   useEffect(() => {
     localState.current.opacity = 0
-    getTexture(item.url, (tex) => setTexture(tex))
+    ;(item.isVideo ? getVideoTexture : getTexture)(item.url, (tex) => setTexture(tex))
   }, [item.url])
 
   if (!texture) return null
@@ -382,6 +407,17 @@ export default function InfiniteMemoryCanvas({ media, active = true, revealed = 
     if (revealed && introStart === null) introStart = performance.now()
   }, [revealed])
 
+  // pause the shared video textures while this layer is hidden (the render loop
+  // is parked too) so they don't decode in the background; resume on return.
+  useEffect(() => {
+    for (const tex of textureCache.values()) {
+      const vid = videoEl(tex)
+      if (!vid) continue
+      if (active) vid.play?.().catch(() => {})
+      else vid.pause?.()
+    }
+  }, [active, media])
+
   // VRAM release: dispose GPU textures whose URL is no longer in the live media
   // set (deleted/edited memories). Deferred so every plane has swapped to its
   // new texture first — disposing a still-bound texture would flash/warn.
@@ -389,7 +425,11 @@ export default function InfiniteMemoryCanvas({ media, active = true, revealed = 
     const live = new Set(media.map((m) => m.url))
     const t = setTimeout(() => {
       for (const [url, tex] of textureCache) {
-        if (!live.has(url)) { tex.dispose?.(); textureCache.delete(url) }
+        if (live.has(url)) continue
+        const vid = videoEl(tex)
+        if (vid) { vid.pause(); vid.removeAttribute('src'); vid.load() } // release the decoder
+        tex.dispose?.()
+        textureCache.delete(url)
       }
     }, 1500)
     return () => clearTimeout(t)

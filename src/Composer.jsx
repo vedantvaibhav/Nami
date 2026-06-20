@@ -24,6 +24,7 @@ function CalendarPopover({ value, max, anchor, onChange, onClose }) {
   const cells = []
   for (let i = 0; i < firstDay; i++) cells.push(null)
   for (let d = 1; d <= daysInMonth; d++) cells.push(d)
+  while (cells.length < 6 * WEEKDAYS.length) cells.push(null) // always 6 rows -> the popover height never changes month-to-month
 
   const atMaxMonth = view.y === today.getFullYear() && view.m === today.getMonth()
   const prevMonth = () => setView((v) => (v.m === 0 ? { y: v.y - 1, m: 11 } : { y: v.y, m: v.m - 1 }))
@@ -66,7 +67,7 @@ function CalendarPopover({ value, max, anchor, onChange, onClose }) {
         <div className="cal-grid cal-weekdays">
           {WEEKDAYS.map((w, i) => <span key={i} className="cal-wd">{w}</span>)}
         </div>
-        <div className="cal-grid">
+        <div className="cal-grid cal-days">
           {cells.map((d, i) =>
             d === null ? (
               <span key={i} />
