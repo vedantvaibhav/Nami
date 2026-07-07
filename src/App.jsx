@@ -7,7 +7,7 @@ import YearOrbit from './YearOrbit.jsx'
 import Lightbox from './Lightbox.jsx'
 import Composer from './Composer.jsx'
 import SettingsPanel from './SettingsPanel.jsx'
-import { supabase } from './supabase.js'
+import { supabase, userProfile } from './supabase.js'
 import { loadMemories, saveMemories, saveImageMedia, deleteImage, randomColorKey } from './store.js'
 import { kindFromMime, MAX_SAFE_BYTES } from './media.js'
 import { ZOOMS, markerLabel, toISO, fromISO, unitStart, currentMonthDays, currentYearMonths } from './time.js'
@@ -723,7 +723,7 @@ export default function App() {
   // empty base screen with a "Log in to continue" bar instead of the dock.
   if (session === undefined || !memories) return <div className="boot-blank" />
 
-  const avatarUrl = session ? (session.user.user_metadata?.avatar_url || session.user.user_metadata?.picture) : null
+  const profile = session ? userProfile(session.user) : null
 
   const openCard = memories.find((m) => m.id === openId)
 
@@ -992,9 +992,9 @@ export default function App() {
 
       {session && (
         <button className="profile-btn" onClick={() => setSettingsOpen(true)} title="Account">
-          {avatarUrl
-            ? <img src={avatarUrl} alt="" referrerPolicy="no-referrer" draggable={false} />
-            : <span>{(session.user.email || '?')[0].toUpperCase()}</span>}
+          {profile.avatarUrl
+            ? <img src={profile.avatarUrl} alt="" referrerPolicy="no-referrer" draggable={false} />
+            : <span>{profile.initial}</span>}
         </button>
       )}
 

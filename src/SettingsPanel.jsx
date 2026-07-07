@@ -1,11 +1,10 @@
 import { motion } from 'framer-motion'
+import { userProfile } from './supabase.js'
 
 // Settings modal opened from the top-right profile avatar. For now it holds the
 // account section + Sign out; room to grow later.
 export default function SettingsPanel({ user, onClose, onSignOut }) {
-  const meta = user.user_metadata || {}
-  const avatarUrl = meta.avatar_url || meta.picture
-  const name = meta.full_name || meta.name || 'Signed in'
+  const { avatarUrl, name, email, initial } = userProfile(user)
 
   return (
     <motion.div
@@ -30,10 +29,10 @@ export default function SettingsPanel({ user, onClose, onSignOut }) {
         <div className="settings-account">
           {avatarUrl
             ? <img className="settings-avatar" src={avatarUrl} alt="" referrerPolicy="no-referrer" draggable={false} />
-            : <div className="settings-avatar settings-avatar-fallback">{(user.email || '?')[0].toUpperCase()}</div>}
+            : <div className="settings-avatar settings-avatar-fallback">{initial}</div>}
           <div className="settings-account-text">
             <div className="settings-name">{name}</div>
-            <div className="settings-email">{user.email}</div>
+            <div className="settings-email">{email}</div>
           </div>
         </div>
 
