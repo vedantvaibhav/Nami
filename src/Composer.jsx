@@ -149,8 +149,12 @@ export default function Composer({ active, defaultDate, editing, onClose, onAdd 
         imgRoom--
       }
       const id = crypto.randomUUID()
-      await saveImageMedia(id, file, kind) // original + (for images) a thumbnail
-      setMedia((m) => [...m, { id, kind, name: file.name }])
+      try {
+        await saveImageMedia(id, file, kind)
+        setMedia((m) => [...m, { id, kind, name: file.name }])
+      } catch {
+        setWarn(true) // upload failed — surface it instead of silently doing nothing
+      }
     }
   }
 
@@ -219,7 +223,7 @@ export default function Composer({ active, defaultDate, editing, onClose, onAdd 
           onChange={(e) => { attach([...e.target.files]); e.target.value = '' }}
         />
       </div>
-      {warn && <div className="cmp-warn">This file is large and may not save reliably.</div>}
+      {warn && <div className="cmp-warn">Some files couldn’t be added — try a smaller file.</div>}
 
       {/* date with custom calendar */}
       <button ref={dateBtnRef} type="button" className="cmp-date" onClick={toggleCal}>

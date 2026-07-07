@@ -51,14 +51,41 @@ const deliveryType = (id) => {
   return k === 'video' || k === 'audio' ? 'video' : 'image'
 }
 
+// Cloudinary's UNSIGNED upload endpoint rejects files over 10MB — real phone
+// photos routinely exceed that, so an oversized image would fail silently. Shrink
+// images above this to a 2048px JPEG before upload; Cloudinary still derives every
+// display size from it, so quality is unaffected in practice. Already-small images
+// and non-images pass through untouched.
+const UPLOAD_MAX_BYTES = 9_500_000
+const UPLOAD_MAX_EDGE = 2048
+async function downscaleImage(blob) {
+  if (blob.size <= UPLOAD_MAX_BYTES) return blob
+  try {
+    const bmp = await createImageBitmap(blob, { imageOrientation: 'from-image' })
+    const scale = Math.min(1, UPLOAD_MAX_EDGE / Math.max(bmp.width, bmp.height))
+    const w = Math.max(1, Math.round(bmp.width * scale))
+    const h = Math.max(1, Math.round(bmp.height * scale))
+    const canvas = document.createElement('canvas')
+    canvas.width = w
+    canvas.height = h
+    canvas.getContext('2d').drawImage(bmp, 0, 0, w, h)
+    bmp.close?.()
+    const out = await new Promise((res) => canvas.toBlob(res, 'image/jpeg', 0.85))
+    return out && out.size < blob.size ? out : blob
+  } catch {
+    return blob // undecodable (e.g. HEIC on some browsers) — upload as-is
+  }
+}
+
 // Upload a media blob to Cloudinary via the unsigned upload endpoint. `auto`
 // resource type accepts image, video, and audio through one endpoint. We reuse
 // our own UUID as the public_id so the delivery URL is reconstructable on any
 // reload with no extra stored data. Throws on failure so the caller can catch.
 export async function saveImageMedia(id, blob, kind) {
   kinds.set(id, kind)
+  const upload = kind === 'image' ? await downscaleImage(blob) : blob
   const form = new FormData()
-  form.append('file', blob)
+  form.append('file', upload)
   form.append('upload_preset', PRESET)
   form.append('public_id', id)
   const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/auto/upload`, {
