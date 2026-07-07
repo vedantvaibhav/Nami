@@ -1,14 +1,36 @@
-import { get, set } from 'idb-keyval'
+import { supabase } from './supabase.js'
 
-// Memories list stays local (idb-keyval); only media blobs move to Cloudinary.
-const LIST_KEY = 'moments:list'
+// Phase 3 plan — move the memories list from IndexedDB to Supabase Postgres:
+// - Minimal transport swap: the list is still ONE array; it now lives in a
+//   single JSONB row per user (memories.data) instead of one idb-keyval value.
+//   Only loadMemories/saveMemories change; Cloudinary media + urlCache/kinds are
+//   untouched.
+// - userId flow: App has session from Phase 2; it passes session.user.id into
+//   loadMemories(userId) and saveMemories(userId, list). RLS scopes the row.
+// - First login: no row exists yet. .single() returns error PGRST116 ("no rows")
+//   — we treat that as an empty list []; the first saveMemories upsert creates
+//   the row.
+// - Race: App guards both effects with `if (!session) return` and depends on
+//   session, so loadMemories only runs once a user id exists.
 
-export async function loadMemories() {
-  return (await get(LIST_KEY)) || null
+export async function loadMemories(userId) {
+  const { data, error } = await supabase
+    .from('memories')
+    .select('data')
+    .eq('user_id', userId)
+    .single()
+  if (error) {
+    if (error.code === 'PGRST116') return [] // no row yet — valid empty state
+    throw error
+  }
+  return data.data
 }
 
-export async function saveMemories(list) {
-  await set(LIST_KEY, list)
+export async function saveMemories(userId, list) {
+  const { error } = await supabase
+    .from('memories')
+    .upsert({ user_id: userId, data: list, updated_at: new Date().toISOString() })
+  if (error) throw error
 }
 
 // ---- Cloudinary media storage ----------------------------------------------

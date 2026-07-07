@@ -151,7 +151,8 @@ export default function App() {
 
   // ---- load / persist -------------------------------------------------
   useEffect(() => {
-    loadMemories().then((saved) => {
+    if (!session) return // wait for a signed-in user before loading their row
+    loadMemories(session.user.id).then((saved) => {
       // start empty — only days the user actually adds to will appear
       const list = saved && saved.length ? saved : []
       // migrate legacy single-image cards (imgId) to the media[] model
@@ -165,14 +166,15 @@ export default function App() {
     }).catch(() => {
       setMemories([]) // a failed storage read still reveals (empty timeline)
     })
-  }, [])
+  }, [session])
 
   // debounced autosave (800ms) — persists every non-empty card, dropping the
   // transient warnLarge flag so it never reaches storage
   useEffect(() => {
+    if (!session) return
     if (!memories) return
     const t = setTimeout(() => {
-      saveMemories(memories.filter((m) => !isEmpty(m)).map(({ warnLarge, ...keep }) => keep))
+      saveMemories(session.user.id, memories.filter((m) => !isEmpty(m)).map(({ warnLarge, ...keep }) => keep))
     }, 800)
     return () => clearTimeout(t)
   }, [memories])
@@ -715,8 +717,8 @@ export default function App() {
   if (session === undefined) return <div className="boot-blank" />
   if (!session) return <AuthScreen />
 
-  // storage read is near-instant (idb-keyval) — a plain off-white screen for
-  // those few ms, no loader
+  // memories load from Supabase (a network round-trip) — a plain off-white
+  // screen until the signed-in user's row resolves, no loader
   if (!memories) return <div className="boot-blank" />
 
   const openCard = memories.find((m) => m.id === openId)
