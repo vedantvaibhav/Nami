@@ -354,10 +354,20 @@ export default function App() {
   }, [memories, zoomIdx])
 
   const pendingCenter = useRef(null)
+  const pendingCenterDate = useRef(null)
   const setZoomKeepCenter = (idx) => {
     const el = scrollRef.current
-    // preserve scroll *fraction* across zooms (columns re-lay-out by count)
-    if (el) {
+    pendingCenter.current = null
+    pendingCenterDate.current = null
+    // Keep you where your memories are across a zoom. From a 2D view (days/
+    // months), anchor on the DATE at the viewport centre — so zooming out lands
+    // on the month that actually holds that day, not back at fraction 0 (Jan).
+    // Days is sparse and Months is continuous, so a raw fraction doesn't map.
+    // From Years (no horizontal scroll) keep the fraction fallback.
+    if (el && zoom.id !== 'years' && columns.length) {
+      const i = Math.max(0, Math.min(columns.length - 1, Math.floor((el.scrollLeft + el.clientWidth / 2) / COL_W)))
+      pendingCenterDate.current = columns[i]?.key || null
+    } else if (el) {
       const maxScroll = el.scrollWidth - el.clientWidth
       pendingCenter.current = maxScroll > 0 ? el.scrollLeft / maxScroll : 0
     }
@@ -370,7 +380,18 @@ export default function App() {
   // same reflow (double forced layout on the switch frame).
   useLayoutEffect(() => {
     const el = scrollRef.current
-    if (el && pendingCenter.current !== null) {
+    if (el && pendingCenterDate.current !== null) {
+      // land on the column for the anchored date in the NEW view: the exact unit
+      // (e.g. that day's month), else the nearest column in time.
+      const date = pendingCenterDate.current
+      let i = columns.findIndex((c) => c.key === unitStart(date, view2d))
+      if (i < 0) { i = columns.findIndex((c) => c.key >= date); if (i < 0) i = columns.length - 1 }
+      if (i >= 0) {
+        const target = i * COL_W + COL_W / 2 - el.clientWidth / 2
+        el.scrollLeft = Math.max(0, Math.min(target, el.scrollWidth - el.clientWidth))
+      }
+      pendingCenterDate.current = null
+    } else if (el && pendingCenter.current !== null) {
       el.scrollLeft = pendingCenter.current * (el.scrollWidth - el.clientWidth)
       pendingCenter.current = null
     }
