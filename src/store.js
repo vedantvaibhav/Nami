@@ -77,6 +77,17 @@ async function downscaleImage(blob) {
   }
 }
 
+// Seed an INSTANT local preview for a just-picked file: imageURL/thumbURL return
+// this object URL for the rest of the session, so the image shows immediately
+// with no upload wait and no round-trip back from Cloudinary. A reload falls back
+// to the Cloudinary delivery URL (by then the background upload has landed).
+export function cachePreview(id, file, kind) {
+  kinds.set(id, kind)
+  const url = URL.createObjectURL(file)
+  urlCache.set('img:' + id, url)
+  urlCache.set('thumb:' + id, url)
+}
+
 // Upload a media blob to Cloudinary via the unsigned upload endpoint. `auto`
 // resource type accepts image, video, and audio through one endpoint. We reuse
 // our own UUID as the public_id so the delivery URL is reconstructable on any

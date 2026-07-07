@@ -8,7 +8,7 @@ import Lightbox from './Lightbox.jsx'
 import Composer from './Composer.jsx'
 import SettingsPanel from './SettingsPanel.jsx'
 import { supabase, userProfile } from './supabase.js'
-import { loadMemories, saveMemories, saveImageMedia, deleteImage, randomColorKey } from './store.js'
+import { loadMemories, saveMemories, saveImageMedia, cachePreview, deleteImage, randomColorKey } from './store.js'
 import { kindFromMime, MAX_SAFE_BYTES } from './media.js'
 import { ZOOMS, markerLabel, toISO, fromISO, unitStart, currentMonthDays, currentYearMonths } from './time.js'
 
@@ -672,18 +672,18 @@ export default function App() {
         imgRoom--
       }
       const mediaId = crypto.randomUUID()
-      try {
-        await saveImageMedia(mediaId, file, kind) // original + (for images) a thumbnail
-        setMemories((ms) =>
-          ms.map((m) =>
-            m.id === id
-              ? { ...m, saveError: false, media: [...(m.media || []), { id: mediaId, kind, name: file.name }] }
-              : m
-          )
+      cachePreview(mediaId, file, kind) // instant local preview
+      setMemories((ms) =>
+        ms.map((m) =>
+          m.id === id
+            ? { ...m, saveError: false, media: [...(m.media || []), { id: mediaId, kind, name: file.name }] }
+            : m
         )
-      } catch {
+      )
+      // upload in the background; flag the card if it fails
+      saveImageMedia(mediaId, file, kind).catch(() =>
         setMemories((ms) => ms.map((m) => (m.id === id ? { ...m, saveError: true } : m)))
-      }
+      )
     }
   }
 

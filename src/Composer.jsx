@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { AnimatePresence, motion } from 'framer-motion'
-import { saveImageMedia, COLORS, COLOR_KEYS, randomColorKey } from './store.js'
+import { saveImageMedia, cachePreview, COLORS, COLOR_KEYS, randomColorKey } from './store.js'
 import { toISO, fromISO } from './time.js'
 import { ACCEPT, icons, kindFromMime, MAX_SAFE_BYTES } from './media.js'
 import { Icon, useThumb } from './MemoryCard.jsx'
@@ -149,12 +149,9 @@ export default function Composer({ active, defaultDate, editing, onClose, onAdd 
         imgRoom--
       }
       const id = crypto.randomUUID()
-      try {
-        await saveImageMedia(id, file, kind)
-        setMedia((m) => [...m, { id, kind, name: file.name }])
-      } catch {
-        setWarn(true) // upload failed — surface it instead of silently doing nothing
-      }
+      cachePreview(id, file, kind)                 // show it instantly from the local file
+      setMedia((m) => [...m, { id, kind, name: file.name }])
+      saveImageMedia(id, file, kind).catch(() => setWarn(true)) // upload in the background
     }
   }
 
