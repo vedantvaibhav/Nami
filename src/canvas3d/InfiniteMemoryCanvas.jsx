@@ -82,7 +82,7 @@ function getVideoTexture(url, onReady) {
 function MediaPlane({ position, scale, item, chunkCx, chunkCy, chunkCz, cameraGridRef, onOpen, introDelay = 0 }) {
   const meshRef = useRef(null)
   const materialRef = useRef(null)
-  const localState = useRef({ opacity: 0, frame: 0, introScaled: false, introDone: false })
+  const localState = useRef({ opacity: 0, frame: 0, introScaled: false, introDone: false, scaleInit: false })
   const [texture, setTexture] = useState(null)
 
   useFrame(() => {
@@ -90,6 +90,9 @@ function MediaPlane({ position, scale, item, chunkCx, chunkCy, chunkCz, cameraGr
     const mesh = meshRef.current
     const state = localState.current
     if (!material || !mesh) return
+
+    // first frame with a mounted mesh: snap to the right size (still invisible)
+    if (!state.scaleInit) { mesh.scale.copy(displayScale); state.scaleInit = true }
 
     // ---- boot reveal gate: hold invisible, then ease in (staggered) ----
     // once done, skip the clock read + easing math forever (hot path)
@@ -116,6 +119,11 @@ function MediaPlane({ position, scale, item, chunkCx, chunkCy, chunkCz, cameraGr
         state.introScaled = false
       }
     }
+
+    // after the intro, EASE any size/aspect change (a live media remap when a
+    // photo is added) toward the new target instead of snapping — this is what
+    // stops the whole field from lurching/"trimming down" on upload
+    if (state.introDone) mesh.scale.lerp(displayScale, 0.16)
 
     state.frame = (state.frame + 1) & 1
     if (state.opacity < INVIS_THRESHOLD && !mesh.visible && state.frame === 0 && state.introDone) return
@@ -157,7 +165,9 @@ function MediaPlane({ position, scale, item, chunkCx, chunkCy, chunkCz, cameraGr
   }, [item.width, item.height, scale])
 
   useEffect(() => {
-    localState.current.opacity = 0
+    // Don't reset opacity here: on a live media remap that blinked the WHOLE
+    // field out and back in. The new texture swaps in at the plane's current
+    // opacity, and the scale eases (see useFrame), so an upload no longer lurches.
     ;(item.isVideo ? getVideoTexture : getTexture)(item.url, (tex) => setTexture(tex))
   }, [item.url])
 
@@ -167,7 +177,6 @@ function MediaPlane({ position, scale, item, chunkCx, chunkCy, chunkCz, cameraGr
     <mesh
       ref={meshRef}
       position={position}
-      scale={displayScale}
       visible={false}
       geometry={PLANE_GEOMETRY}
       onClick={(e) => {
