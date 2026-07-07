@@ -55,6 +55,35 @@ const collateColumn = (items, view) => {
   return view === 'months' ? sorted.slice(0, MONTHS_VIEW_MAX) : sorted
 }
 
+// Shown to logged-out visitors so the product is visible immediately (read-only —
+// never written to Supabase). Placeholder entries; real Cloudinary media later.
+const DEMO_MEMORIES = [
+  { id: 'demo-1', type: 'note', title: 'Morning hike', body: 'First trail of the year', date: '2024-03-08', color: 'mint', media: [] },
+  { id: 'demo-2', type: 'note', title: "Dad's birthday", body: 'The whole family came', date: '2024-03-22', color: 'yellow', media: [] },
+  { id: 'demo-3', type: 'note', title: 'Beach day', body: '', date: '2024-04-14', color: 'blue', media: [] },
+  { id: 'demo-4', type: 'note', title: 'Garden party', body: "Mia's farewell evening", date: '2024-05-03', color: 'purple', media: [] },
+  { id: 'demo-5', type: 'note', title: 'Road trip', body: '3 days, 1,200 km', date: '2024-06-17', color: 'peach', media: [] },
+  { id: 'demo-6', type: 'note', title: 'Rooftop dinner', body: 'Golden hour over the city', date: '2024-06-28', color: 'pink', media: [] },
+]
+
+// Minimal top nav over the live demo timeline when signed out.
+function DemoNav({ onSignIn }) {
+  return (
+    <div style={{
+      position: 'fixed', top: 0, left: 0, right: 0, zIndex: 9999,
+      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+      padding: '14px 28px',
+      background: 'linear-gradient(to bottom, rgba(10,9,6,0.95) 0%, rgba(10,9,6,0) 100%)',
+      pointerEvents: 'none', // clicks pass through to the timeline except on interactive els
+    }}>
+      <span style={{ fontFamily: 'Newsreader, Georgia, serif', fontStyle: 'italic', fontSize: 20, fontWeight: 400, color: '#f0ede8', pointerEvents: 'auto' }}>Nami</span>
+      <button onClick={onSignIn} style={{ pointerEvents: 'auto', fontFamily: 'Inter, sans-serif', fontSize: 13, fontWeight: 500, color: '#0a0906', background: '#f0ede8', border: 'none', borderRadius: 20, padding: '8px 20px', cursor: 'pointer' }}>
+        Sign in with Google →
+      </button>
+    </div>
+  )
+}
+
 export default function App() {
   const [memories, setMemories] = useState(null)
   const [zoomIdx, setZoomIdx] = useState(2) // open in Years view on load
@@ -155,7 +184,7 @@ export default function App() {
 
   // ---- load / persist -------------------------------------------------
   useEffect(() => {
-    if (!session) { setMemories([]); return } // logged out: show the empty base screen
+    if (!session) { setMemories(DEMO_MEMORIES); return } // logged out: read-only demo timeline
     loadMemories(session.user.id).then((saved) => {
       // start empty — only days the user actually adds to will appear
       const list = saved && saved.length ? saved : []
@@ -895,7 +924,6 @@ export default function App() {
       </motion.div>
 
       <div className="dock-wrap">
-        {session ? (
         <motion.div
           className={`dock-shell ${composerOpen ? 'dock-shell-open' : ''}`}
           initial={{ y: 84, opacity: 0 }}
@@ -965,8 +993,8 @@ export default function App() {
               title="Zoom in"
             >+</button>
 
-            <span className="zoombar-divider" />
-            <button className="add-cta" onClick={openComposer}>Add</button>
+            {session && <span className="zoombar-divider" />}
+            {session && <button className="add-cta" onClick={openComposer}>Add</button>}
           </motion.div>
 
           {/* composer face */}
@@ -992,24 +1020,9 @@ export default function App() {
             />
           </motion.div>
         </motion.div>
-        ) : (
-        <motion.button
-          className="login-bar"
-          onClick={signInWithGoogle}
-          initial={{ y: 84, opacity: 0 }}
-          animate={{ y: booted ? 0 : 84, opacity: booted ? 1 : 0 }}
-          transition={{ y: { duration: 0.9, ease: SWIFT, delay: 1.1 }, opacity: { duration: 0.6, ease: 'easeOut', delay: 1.1 } }}
-        >
-          <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
-            <path fill="#4285F4" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.92c1.7-1.57 2.68-3.88 2.68-6.62z" />
-            <path fill="#34A853" d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.92-2.26c-.8.54-1.83.86-3.04.86-2.34 0-4.32-1.58-5.03-3.71H.96v2.33A9 9 0 0 0 9 18z" />
-            <path fill="#FBBC05" d="M3.97 10.71a5.41 5.41 0 0 1 0-3.42V4.96H.96a9 9 0 0 0 0 8.08l3.01-2.33z" />
-            <path fill="#EA4335" d="M9 3.58c1.32 0 2.51.45 3.44 1.35l2.58-2.59C13.46.89 11.43 0 9 0A9 9 0 0 0 .96 4.96l3.01 2.33C4.68 5.16 6.66 3.58 9 3.58z" />
-          </svg>
-          <span>Log in to continue</span>
-        </motion.button>
-        )}
       </div>
+
+      {!session && <DemoNav onSignIn={signInWithGoogle} />}
 
       {session && (
         <button className="profile-btn" onClick={() => setSettingsOpen(true)} title="Account">
