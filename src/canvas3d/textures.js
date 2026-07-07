@@ -106,20 +106,29 @@ const FALLBACK_DIMS = { w: 4, h: 3 } // default plane aspect when a real size ca
 const roundedPhoto = (url) =>
   new Promise((resolve) => {
     const img = new Image()
+    // Cloudinary serves CORS headers; without crossOrigin the canvas is TAINTED
+    // and toDataURL throws — which used to hang the whole orbit build.
+    img.crossOrigin = 'anonymous'
     img.onload = () => {
       const w = img.naturalWidth || FALLBACK_DIMS.w
       const h = img.naturalHeight || FALLBACK_DIMS.h
-      const scale = Math.min(1, 1024 / Math.max(w, h))
-      const cw = Math.max(1, Math.round(w * scale))
-      const ch = Math.max(1, Math.round(h * scale))
-      const c = document.createElement('canvas')
-      c.width = cw
-      c.height = ch
-      const ctx = c.getContext('2d')
-      roundRect(ctx, 0, 0, cw, ch, Math.round(Math.min(cw, ch) * 0.07))
-      ctx.clip()
-      ctx.drawImage(img, 0, 0, cw, ch)
-      resolve({ url: c.toDataURL('image/png'), width: w, height: h })
+      try {
+        const scale = Math.min(1, 1024 / Math.max(w, h))
+        const cw = Math.max(1, Math.round(w * scale))
+        const ch = Math.max(1, Math.round(h * scale))
+        const c = document.createElement('canvas')
+        c.width = cw
+        c.height = ch
+        const ctx = c.getContext('2d')
+        roundRect(ctx, 0, 0, cw, ch, Math.round(Math.min(cw, ch) * 0.07))
+        ctx.clip()
+        ctx.drawImage(img, 0, 0, cw, ch)
+        resolve({ url: c.toDataURL('image/png'), width: w, height: h })
+      } catch {
+        // tainted/decode failure — fall back to the source url (no rounding),
+        // never leave the promise hanging (that froze the whole orbit build)
+        resolve({ url, width: w, height: h })
+      }
     }
     img.onerror = () => resolve({ url, width: FALLBACK_DIMS.w, height: FALLBACK_DIMS.h })
     img.src = url
