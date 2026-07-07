@@ -7,6 +7,15 @@ import { firstImageId, seededTilt } from './media.js'
 import { buildMediaItems, memKey } from './canvas3d/textures.js'
 import InfiniteMemoryCanvas from './canvas3d/InfiniteMemoryCanvas.jsx'
 
+// Some mobile devices can't create a WebGL context — render the empty-state photo
+// instead of a blank white canvas so the Years view always shows something.
+const webglOK = (() => {
+  try {
+    const c = document.createElement('canvas')
+    return !!(c.getContext('webgl2') || c.getContext('webgl'))
+  } catch { return false }
+})()
+
 function OrbitModal({ m, onClose }) {
   const color = COLORS[m.color] || COLORS.blue
   const imgUrl = useImage(firstImageId(m))
@@ -69,12 +78,12 @@ export default function YearOrbit({ memories, active = true, revealed = true }) 
 
   return (
     <div className="orbit-view">
-      {media && <InfiniteMemoryCanvas media={media} active={active} revealed={revealed} onOpen={setOpen} />}
+      {media && webglOK && <InfiniteMemoryCanvas media={media} active={active} revealed={revealed} onOpen={setOpen} />}
 
       {/* empty state: a full-bleed photo that slowly zooms, then the line fades
           in, then the bottom panel rises (staged via CSS delays). The first
           memory swaps this for the real orbit. */}
-      {memories.length === 0 && (
+      {(memories.length === 0 || !webglOK) && (
         <div className="orbit-empty">
           <img className="orbit-empty-img" src="/empty_state.png" alt="" draggable={false} />
           <div className="orbit-empty-text">The unscripted moments that make you pause</div>

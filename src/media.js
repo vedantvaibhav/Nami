@@ -1,5 +1,8 @@
 // Media helpers: type inference, deterministic tilts, video thumbnails, time formatting
-export const ACCEPT = 'image/jpeg,image/png,image/gif,image/webp,image/heic,video/mp4,video/quicktime,video/webm,audio/mpeg,audio/mp4,audio/x-m4a,audio/wav,audio/ogg'
+// Broad categories so iOS Safari's photo picker shows selectable photos. Narrow
+// per-subtype lists (image/jpeg,image/heic,…) make iOS grey out the library or
+// route to Files instead of Photos. attach() still filters via kindFromMime().
+export const ACCEPT = 'image/*,video/*,audio/*'
 
 export const MAX_SAFE_BYTES = 200 * 1024 * 1024 // warn above 200MB
 

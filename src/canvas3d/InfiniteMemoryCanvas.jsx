@@ -42,10 +42,9 @@ function getTexture(url, onLoad) {
     return existing
   }
   const texture = loader.load(url, (tex) => {
-    tex.minFilter = THREE.LinearMipmapLinearFilter
+    tex.minFilter = THREE.LinearFilter // NPOT + mipmaps render blank on WebGL1 (mobile fallback)
     tex.magFilter = THREE.LinearFilter
-    tex.generateMipmaps = true
-    tex.anisotropy = 4
+    tex.generateMipmaps = false
     tex.colorSpace = THREE.SRGBColorSpace
     tex.needsUpdate = true
     onLoad?.(tex)
@@ -445,6 +444,12 @@ export default function InfiniteMemoryCanvas({ media, active = true, revealed = 
         flat
         frameloop={active ? 'always' : 'never'} // pause render loop while the layer is hidden
         gl={{ antialias: false, powerPreference: 'high-performance' }}
+        onCreated={({ gl, invalidate }) => {
+          // recover from a transient mobile GL context loss instead of staying blank
+          const el = gl.domElement
+          el.addEventListener('webglcontextlost', (e) => e.preventDefault(), false)
+          el.addEventListener('webglcontextrestored', () => invalidate(), false)
+        }}
       >
         <color attach="background" args={['#FDFDFC']} />
         <fog attach="fog" args={['#FDFDFC', 120, 320]} />
