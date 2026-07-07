@@ -6,7 +6,9 @@ import MemoryCard from './MemoryCard.jsx'
 import YearOrbit from './YearOrbit.jsx'
 import Lightbox from './Lightbox.jsx'
 import Composer from './Composer.jsx'
-import { loadMemories, saveMemories, saveImageMedia, deleteImage, randomColorKey } from './store.js'
+import SettingsPanel from './SettingsPanel.jsx'
+import { supabase, userProfile } from './supabase.js'
+import { loadMemories, saveMemories, saveImageMedia, cachePreview, deleteImage, randomColorKey } from './store.js'
 import { kindFromMime, MAX_SAFE_BYTES } from './media.js'
 import { ZOOMS, markerLabel, toISO, fromISO, unitStart, currentMonthDays, currentYearMonths } from './time.js'
 
@@ -74,6 +76,20 @@ export default function App() {
     const id = requestAnimationFrame(() => setBooted(true))
     return () => cancelAnimationFrame(id)
   }, [])
+
+  // ---- auth session -----------------------------------------------------
+  // undefined = still resolving the initial session; null = signed out; object
+  // = signed in. The render gate below uses these three states.
+  const [session, setSession] = useState(undefined)
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => setSession(data.session))
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, s) => setSession(s))
+    return () => sub.subscription.unsubscribe()
+  }, [])
+  const signInWithGoogle = () =>
+    supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: window.location.origin } })
+  const handleSignOut = () => { setSettingsOpen(false); supabase.auth.signOut() }
   const [dockDims, setDockDims] = useState({ toolbarW: 462, composerH: 450 })
   const scrollRef = useRef(null)
 
@@ -139,7 +155,8 @@ export default function App() {
 
   // ---- load / persist -------------------------------------------------
   useEffect(() => {
-    loadMemories().then((saved) => {
+    if (!session) { setMemories([]); return } // logged out: show the empty base screen
+    loadMemories(session.user.id).then((saved) => {
       // start empty — only days the user actually adds to will appear
       const list = saved && saved.length ? saved : []
       // migrate legacy single-image cards (imgId) to the media[] model
@@ -153,14 +170,15 @@ export default function App() {
     }).catch(() => {
       setMemories([]) // a failed storage read still reveals (empty timeline)
     })
-  }, [])
+  }, [session])
 
   // debounced autosave (800ms) — persists every non-empty card, dropping the
   // transient warnLarge flag so it never reaches storage
   useEffect(() => {
+    if (!session) return
     if (!memories) return
     const t = setTimeout(() => {
-      saveMemories(memories.filter((m) => !isEmpty(m)).map(({ warnLarge, ...keep }) => keep))
+      saveMemories(session.user.id, memories.filter((m) => !isEmpty(m)).map(({ warnLarge, ...keep }) => keep))
     }, 800)
     return () => clearTimeout(t)
   }, [memories])
@@ -336,10 +354,20 @@ export default function App() {
   }, [memories, zoomIdx])
 
   const pendingCenter = useRef(null)
+  const pendingCenterDate = useRef(null)
   const setZoomKeepCenter = (idx) => {
     const el = scrollRef.current
-    // preserve scroll *fraction* across zooms (columns re-lay-out by count)
-    if (el) {
+    pendingCenter.current = null
+    pendingCenterDate.current = null
+    // Keep you where your memories are across a zoom. From a 2D view (days/
+    // months), anchor on the DATE at the viewport centre — so zooming out lands
+    // on the month that actually holds that day, not back at fraction 0 (Jan).
+    // Days is sparse and Months is continuous, so a raw fraction doesn't map.
+    // From Years (no horizontal scroll) keep the fraction fallback.
+    if (el && zoom.id !== 'years' && columns.length) {
+      const i = Math.max(0, Math.min(columns.length - 1, Math.floor((el.scrollLeft + el.clientWidth / 2) / COL_W)))
+      pendingCenterDate.current = columns[i]?.key || null
+    } else if (el) {
       const maxScroll = el.scrollWidth - el.clientWidth
       pendingCenter.current = maxScroll > 0 ? el.scrollLeft / maxScroll : 0
     }
@@ -352,7 +380,18 @@ export default function App() {
   // same reflow (double forced layout on the switch frame).
   useLayoutEffect(() => {
     const el = scrollRef.current
-    if (el && pendingCenter.current !== null) {
+    if (el && pendingCenterDate.current !== null) {
+      // land on the column for the anchored date in the NEW view: the exact unit
+      // (e.g. that day's month), else the nearest column in time.
+      const date = pendingCenterDate.current
+      let i = columns.findIndex((c) => c.key === unitStart(date, view2d))
+      if (i < 0) { i = columns.findIndex((c) => c.key >= date); if (i < 0) i = columns.length - 1 }
+      if (i >= 0) {
+        const target = i * COL_W + COL_W / 2 - el.clientWidth / 2
+        el.scrollLeft = Math.max(0, Math.min(target, el.scrollWidth - el.clientWidth))
+      }
+      pendingCenterDate.current = null
+    } else if (el && pendingCenter.current !== null) {
       el.scrollLeft = pendingCenter.current * (el.scrollWidth - el.clientWidth)
       pendingCenter.current = null
     }
@@ -654,18 +693,18 @@ export default function App() {
         imgRoom--
       }
       const mediaId = crypto.randomUUID()
-      try {
-        await saveImageMedia(mediaId, file, kind) // original + (for images) a thumbnail
-        setMemories((ms) =>
-          ms.map((m) =>
-            m.id === id
-              ? { ...m, saveError: false, media: [...(m.media || []), { id: mediaId, kind, name: file.name }] }
-              : m
-          )
+      cachePreview(mediaId, file, kind) // instant local preview
+      setMemories((ms) =>
+        ms.map((m) =>
+          m.id === id
+            ? { ...m, saveError: false, media: [...(m.media || []), { id: mediaId, kind, name: file.name }] }
+            : m
         )
-      } catch {
+      )
+      // upload in the background; flag the card if it fails
+      saveImageMedia(mediaId, file, kind).catch(() =>
         setMemories((ms) => ms.map((m) => (m.id === id ? { ...m, saveError: true } : m)))
-      }
+      )
     }
   }
 
@@ -676,6 +715,7 @@ export default function App() {
   // to Timeline").
   const onDrop = async (e) => {
     e.preventDefault()
+    if (!session) return // logged out: no adding
     if (composerOpen) return // composer's upload handles its own drop
     if (zoom.id === 'years') return // orbit view: no drop target
     const files = [...(e.dataTransfer?.files || [])]
@@ -687,6 +727,7 @@ export default function App() {
 
   useEffect(() => {
     const onPaste = async (e) => {
+      if (!session) return // logged out: no adding
       if (composerOpen) return // don't quick-add while composing
       const item = [...(e.clipboardData?.items || [])].find((i) => i.type.startsWith('image/'))
       if (!item) return
@@ -696,11 +737,14 @@ export default function App() {
     }
     window.addEventListener('paste', onPaste)
     return () => window.removeEventListener('paste', onPaste)
-  }, [memories, composerOpen])
+  }, [memories, composerOpen, session])
 
-  // storage read is near-instant (idb-keyval) — a plain off-white screen for
-  // those few ms, no loader
-  if (!memories) return <div className="boot-blank" />
+  // blank only while the session resolves or memories load; the app shell
+  // renders whether or not someone is signed in — a logged-out user sees the
+  // empty base screen with a "Log in to continue" bar instead of the dock.
+  if (session === undefined || !memories) return <div className="boot-blank" />
+
+  const profile = session ? userProfile(session.user) : null
 
   const openCard = memories.find((m) => m.id === openId)
 
@@ -851,6 +895,7 @@ export default function App() {
       </motion.div>
 
       <div className="dock-wrap">
+        {session ? (
         <motion.div
           className={`dock-shell ${composerOpen ? 'dock-shell-open' : ''}`}
           initial={{ y: 84, opacity: 0 }}
@@ -947,7 +992,38 @@ export default function App() {
             />
           </motion.div>
         </motion.div>
+        ) : (
+        <motion.button
+          className="login-bar"
+          onClick={signInWithGoogle}
+          initial={{ y: 84, opacity: 0 }}
+          animate={{ y: booted ? 0 : 84, opacity: booted ? 1 : 0 }}
+          transition={{ y: { duration: 0.9, ease: SWIFT, delay: 1.1 }, opacity: { duration: 0.6, ease: 'easeOut', delay: 1.1 } }}
+        >
+          <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
+            <path fill="#4285F4" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.92c1.7-1.57 2.68-3.88 2.68-6.62z" />
+            <path fill="#34A853" d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.92-2.26c-.8.54-1.83.86-3.04.86-2.34 0-4.32-1.58-5.03-3.71H.96v2.33A9 9 0 0 0 9 18z" />
+            <path fill="#FBBC05" d="M3.97 10.71a5.41 5.41 0 0 1 0-3.42V4.96H.96a9 9 0 0 0 0 8.08l3.01-2.33z" />
+            <path fill="#EA4335" d="M9 3.58c1.32 0 2.51.45 3.44 1.35l2.58-2.59C13.46.89 11.43 0 9 0A9 9 0 0 0 .96 4.96l3.01 2.33C4.68 5.16 6.66 3.58 9 3.58z" />
+          </svg>
+          <span>Log in to continue</span>
+        </motion.button>
+        )}
       </div>
+
+      {session && (
+        <button className="profile-btn" onClick={() => setSettingsOpen(true)} title="Account">
+          {profile.avatarUrl
+            ? <img src={profile.avatarUrl} alt="" referrerPolicy="no-referrer" draggable={false} />
+            : <span>{profile.initial}</span>}
+        </button>
+      )}
+
+      <AnimatePresence>
+        {settingsOpen && session && (
+          <SettingsPanel user={session.user} onClose={() => setSettingsOpen(false)} onSignOut={handleSignOut} />
+        )}
+      </AnimatePresence>
 
       <AnimatePresence>
         {openCard && <Lightbox key={openCard.id} m={openCard} onClose={() => setOpenId(null)} />}

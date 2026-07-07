@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { AnimatePresence, motion } from 'framer-motion'
-import { saveImageMedia, COLORS, COLOR_KEYS, randomColorKey } from './store.js'
+import { saveImageMedia, cachePreview, COLORS, COLOR_KEYS, randomColorKey } from './store.js'
 import { toISO, fromISO } from './time.js'
 import { ACCEPT, icons, kindFromMime, MAX_SAFE_BYTES } from './media.js'
 import { Icon, useThumb } from './MemoryCard.jsx'
@@ -149,8 +149,9 @@ export default function Composer({ active, defaultDate, editing, onClose, onAdd 
         imgRoom--
       }
       const id = crypto.randomUUID()
-      await saveImageMedia(id, file, kind) // original + (for images) a thumbnail
+      cachePreview(id, file, kind)                 // show it instantly from the local file
       setMedia((m) => [...m, { id, kind, name: file.name }])
+      saveImageMedia(id, file, kind).catch(() => setWarn(true)) // upload in the background
     }
   }
 
@@ -219,7 +220,7 @@ export default function Composer({ active, defaultDate, editing, onClose, onAdd 
           onChange={(e) => { attach([...e.target.files]); e.target.value = '' }}
         />
       </div>
-      {warn && <div className="cmp-warn">This file is large and may not save reliably.</div>}
+      {warn && <div className="cmp-warn">Some files couldn’t be added — try a smaller file.</div>}
 
       {/* date with custom calendar */}
       <button ref={dateBtnRef} type="button" className="cmp-date" onClick={toggleCal}>

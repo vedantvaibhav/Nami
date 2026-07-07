@@ -10,8 +10,8 @@
   },
   "dependencies": {
     "@react-three/fiber": "^9.6.1",
+    "@supabase/supabase-js": "^2.110.0",
     "framer-motion": "^12.40.0",
-    "idb-keyval": "^6.2.5",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "three": "^0.184.0"
