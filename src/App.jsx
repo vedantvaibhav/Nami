@@ -6,7 +6,7 @@ import MemoryCard from './MemoryCard.jsx'
 import YearOrbit from './YearOrbit.jsx'
 import Lightbox from './Lightbox.jsx'
 import Composer from './Composer.jsx'
-import AuthScreen from './AuthScreen.jsx'
+import SettingsPanel from './SettingsPanel.jsx'
 import { supabase } from './supabase.js'
 import { loadMemories, saveMemories, saveImageMedia, deleteImage, randomColorKey } from './store.js'
 import { kindFromMime, MAX_SAFE_BYTES } from './media.js'
@@ -81,11 +81,15 @@ export default function App() {
   // undefined = still resolving the initial session; null = signed out; object
   // = signed in. The render gate below uses these three states.
   const [session, setSession] = useState(undefined)
+  const [settingsOpen, setSettingsOpen] = useState(false)
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setSession(data.session))
     const { data: sub } = supabase.auth.onAuthStateChange((_event, s) => setSession(s))
     return () => sub.subscription.unsubscribe()
   }, [])
+  const signInWithGoogle = () =>
+    supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: window.location.origin } })
+  const handleSignOut = () => { setSettingsOpen(false); supabase.auth.signOut() }
   const [dockDims, setDockDims] = useState({ toolbarW: 462, composerH: 450 })
   const scrollRef = useRef(null)
 
@@ -151,7 +155,7 @@ export default function App() {
 
   // ---- load / persist -------------------------------------------------
   useEffect(() => {
-    if (!session) return // wait for a signed-in user before loading their row
+    if (!session) { setMemories([]); return } // logged out: show the empty base screen
     loadMemories(session.user.id).then((saved) => {
       // start empty — only days the user actually adds to will appear
       const list = saved && saved.length ? saved : []
@@ -690,6 +694,7 @@ export default function App() {
   // to Timeline").
   const onDrop = async (e) => {
     e.preventDefault()
+    if (!session) return // logged out: no adding
     if (composerOpen) return // composer's upload handles its own drop
     if (zoom.id === 'years') return // orbit view: no drop target
     const files = [...(e.dataTransfer?.files || [])]
@@ -701,6 +706,7 @@ export default function App() {
 
   useEffect(() => {
     const onPaste = async (e) => {
+      if (!session) return // logged out: no adding
       if (composerOpen) return // don't quick-add while composing
       const item = [...(e.clipboardData?.items || [])].find((i) => i.type.startsWith('image/'))
       if (!item) return
@@ -710,16 +716,14 @@ export default function App() {
     }
     window.addEventListener('paste', onPaste)
     return () => window.removeEventListener('paste', onPaste)
-  }, [memories, composerOpen])
+  }, [memories, composerOpen, session])
 
-  // auth gate: blank while the session resolves, then the login screen if
-  // signed out. Only a signed-in session renders the app.
-  if (session === undefined) return <div className="boot-blank" />
-  if (!session) return <AuthScreen />
+  // blank only while the session resolves or memories load; the app shell
+  // renders whether or not someone is signed in — a logged-out user sees the
+  // empty base screen with a "Log in to continue" bar instead of the dock.
+  if (session === undefined || !memories) return <div className="boot-blank" />
 
-  // memories load from Supabase (a network round-trip) — a plain off-white
-  // screen until the signed-in user's row resolves, no loader
-  if (!memories) return <div className="boot-blank" />
+  const avatarUrl = session ? (session.user.user_metadata?.avatar_url || session.user.user_metadata?.picture) : null
 
   const openCard = memories.find((m) => m.id === openId)
 
@@ -870,6 +874,7 @@ export default function App() {
       </motion.div>
 
       <div className="dock-wrap">
+        {session ? (
         <motion.div
           className={`dock-shell ${composerOpen ? 'dock-shell-open' : ''}`}
           initial={{ y: 84, opacity: 0 }}
@@ -941,7 +946,6 @@ export default function App() {
 
             <span className="zoombar-divider" />
             <button className="add-cta" onClick={openComposer}>Add</button>
-            <button className="signout-cta" onClick={() => supabase.auth.signOut()} title="Sign out">Sign out</button>
           </motion.div>
 
           {/* composer face */}
@@ -967,7 +971,38 @@ export default function App() {
             />
           </motion.div>
         </motion.div>
+        ) : (
+        <motion.button
+          className="login-bar"
+          onClick={signInWithGoogle}
+          initial={{ y: 84, opacity: 0 }}
+          animate={{ y: booted ? 0 : 84, opacity: booted ? 1 : 0 }}
+          transition={{ y: { duration: 0.9, ease: SWIFT, delay: 1.1 }, opacity: { duration: 0.6, ease: 'easeOut', delay: 1.1 } }}
+        >
+          <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
+            <path fill="#4285F4" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.92c1.7-1.57 2.68-3.88 2.68-6.62z" />
+            <path fill="#34A853" d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.92-2.26c-.8.54-1.83.86-3.04.86-2.34 0-4.32-1.58-5.03-3.71H.96v2.33A9 9 0 0 0 9 18z" />
+            <path fill="#FBBC05" d="M3.97 10.71a5.41 5.41 0 0 1 0-3.42V4.96H.96a9 9 0 0 0 0 8.08l3.01-2.33z" />
+            <path fill="#EA4335" d="M9 3.58c1.32 0 2.51.45 3.44 1.35l2.58-2.59C13.46.89 11.43 0 9 0A9 9 0 0 0 .96 4.96l3.01 2.33C4.68 5.16 6.66 3.58 9 3.58z" />
+          </svg>
+          <span>Log in to continue</span>
+        </motion.button>
+        )}
       </div>
+
+      {session && (
+        <button className="profile-btn" onClick={() => setSettingsOpen(true)} title="Account">
+          {avatarUrl
+            ? <img src={avatarUrl} alt="" referrerPolicy="no-referrer" draggable={false} />
+            : <span>{(session.user.email || '?')[0].toUpperCase()}</span>}
+        </button>
+      )}
+
+      <AnimatePresence>
+        {settingsOpen && session && (
+          <SettingsPanel user={session.user} onClose={() => setSettingsOpen(false)} onSignOut={handleSignOut} />
+        )}
+      </AnimatePresence>
 
       <AnimatePresence>
         {openCard && <Lightbox key={openCard.id} m={openCard} onClose={() => setOpenId(null)} />}
