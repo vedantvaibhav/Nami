@@ -66,18 +66,19 @@ const DEMO_MEMORIES = [
   { id: 'demo-6', type: 'note', title: 'Rooftop dinner', body: 'Golden hour over the city', date: '2024-06-28', color: 'pink', media: [] },
 ]
 
-// Minimal top nav over the live demo timeline when signed out.
+// Solid top nav (no gradient/blur) with a bottom border, over the live demo
+// timeline when signed out.
 function DemoNav({ onSignIn }) {
   return (
     <div style={{
       position: 'fixed', top: 0, left: 0, right: 0, zIndex: 9999,
       display: 'flex', alignItems: 'center', justifyContent: 'space-between',
       padding: '14px 28px',
-      background: 'linear-gradient(to bottom, rgba(10,9,6,0.95) 0%, rgba(10,9,6,0) 100%)',
-      pointerEvents: 'none', // clicks pass through to the timeline except on interactive els
+      background: '#FDFDFC',
+      borderBottom: '1px solid #E3E5EA',
     }}>
-      <span style={{ fontFamily: 'Newsreader, Georgia, serif', fontStyle: 'italic', fontSize: 20, fontWeight: 400, color: '#f0ede8', pointerEvents: 'auto' }}>Nami</span>
-      <button onClick={onSignIn} style={{ pointerEvents: 'auto', fontFamily: 'Inter, sans-serif', fontSize: 13, fontWeight: 500, color: '#0a0906', background: '#f0ede8', border: 'none', borderRadius: 20, padding: '8px 20px', cursor: 'pointer' }}>
+      <span style={{ fontFamily: '"Helvetica Neue", Helvetica, Arial, sans-serif', fontSize: 20, fontWeight: 600, letterSpacing: '0.01em', color: '#16181D' }}>Nami</span>
+      <button onClick={onSignIn} style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, fontWeight: 500, color: '#fff', background: '#16181D', border: 'none', borderRadius: 20, padding: '8px 20px', cursor: 'pointer' }}>
         Sign in with Google →
       </button>
     </div>
