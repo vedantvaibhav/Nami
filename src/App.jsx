@@ -6,6 +6,8 @@ import MemoryCard from './MemoryCard.jsx'
 import YearOrbit from './YearOrbit.jsx'
 import Lightbox from './Lightbox.jsx'
 import Composer from './Composer.jsx'
+import AuthScreen from './AuthScreen.jsx'
+import { supabase } from './supabase.js'
 import { loadMemories, saveMemories, saveImageMedia, deleteImage, randomColorKey } from './store.js'
 import { kindFromMime, MAX_SAFE_BYTES } from './media.js'
 import { ZOOMS, markerLabel, toISO, fromISO, unitStart, currentMonthDays, currentYearMonths } from './time.js'
@@ -73,6 +75,16 @@ export default function App() {
   useEffect(() => {
     const id = requestAnimationFrame(() => setBooted(true))
     return () => cancelAnimationFrame(id)
+  }, [])
+
+  // ---- auth session -----------------------------------------------------
+  // undefined = still resolving the initial session; null = signed out; object
+  // = signed in. The render gate below uses these three states.
+  const [session, setSession] = useState(undefined)
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => setSession(data.session))
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, s) => setSession(s))
+    return () => sub.subscription.unsubscribe()
   }, [])
   const [dockDims, setDockDims] = useState({ toolbarW: 462, composerH: 450 })
   const scrollRef = useRef(null)
@@ -698,6 +710,11 @@ export default function App() {
     return () => window.removeEventListener('paste', onPaste)
   }, [memories, composerOpen])
 
+  // auth gate: blank while the session resolves, then the login screen if
+  // signed out. Only a signed-in session renders the app.
+  if (session === undefined) return <div className="boot-blank" />
+  if (!session) return <AuthScreen />
+
   // storage read is near-instant (idb-keyval) — a plain off-white screen for
   // those few ms, no loader
   if (!memories) return <div className="boot-blank" />
@@ -922,6 +939,7 @@ export default function App() {
 
             <span className="zoombar-divider" />
             <button className="add-cta" onClick={openComposer}>Add</button>
+            <button className="signout-cta" onClick={() => supabase.auth.signOut()} title="Sign out">Sign out</button>
           </motion.div>
 
           {/* composer face */}
