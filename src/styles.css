@@ -512,30 +512,22 @@ body {
   .composer { padding: 14px; gap: 12px; }
 }
 
-/* ---- auth screen ---- */
+/* ---- auth screen (Google OAuth) ---- */
 .auth-screen { position: fixed; inset: 0; display: grid; place-items: center; background: #FDFDFC; padding: 24px; }
-.auth-card { width: 100%; max-width: 340px; display: flex; flex-direction: column; gap: 12px; }
-.auth-title { font-size: 26px; font-weight: 700; letter-spacing: -0.02em; color: #16181D; text-align: center; }
-.auth-sub { font-size: 14px; color: #6B7280; text-align: center; margin-bottom: 12px; }
-.auth-input {
-  border: 1px solid #E3E5EA; border-radius: 12px; padding: 14px 16px; background: #fff;
-  font-family: inherit; font-size: 16px; color: #16181D; outline: none;
-  transition: border-color 0.15s;
+.auth-card { width: 100%; max-width: 340px; display: flex; flex-direction: column; gap: 12px; text-align: center; }
+.auth-brand { font-size: 34px; font-weight: 700; letter-spacing: -0.02em; color: #16181D; }
+.auth-sub { font-size: 14px; color: #6B7280; margin-bottom: 16px; }
+.google-btn {
+  height: 48px; padding: 0 20px; display: inline-flex; align-items: center; justify-content: center; gap: 10px;
+  background: #fff; color: #16181D; border: 1px solid #E3E5EA; border-radius: 14px;
+  font-family: inherit; font-size: 15px; font-weight: 600; cursor: pointer;
+  box-shadow: 0 1px 2px rgba(20,20,40,0.05);
+  transition: border-color 0.15s, box-shadow 0.15s, opacity 0.15s;
 }
-.auth-input::placeholder { color: #ACB2BE; }
-.auth-input:focus { border-color: #B8BCC4; }
-.auth-btn {
-  margin-top: 4px; height: 48px; border: none; border-radius: 14px;
-  background: #16181D; color: #fff; cursor: pointer;
-  font-family: inherit; font-size: 15px; font-weight: 600;
-  transition: background 0.15s, opacity 0.15s;
-}
-.auth-btn:hover:not(:disabled) { background: #2C2F38; }
-.auth-btn:disabled { opacity: 0.5; cursor: default; }
-.auth-error { font-size: 13px; color: #DB2777; text-align: center; }
-.auth-info { font-size: 13px; color: #6B7280; text-align: center; }
-.auth-toggle { margin-top: 8px; background: none; border: none; color: #6B7280; font-family: inherit; font-size: 13px; cursor: pointer; }
-.auth-toggle:hover { color: #16181D; }
+.google-btn:hover:not(:disabled) { border-color: #C8CCD4; box-shadow: 0 2px 8px rgba(20,20,40,0.08); }
+.google-btn:disabled { opacity: 0.6; cursor: default; }
+.google-btn svg { flex-shrink: 0; }
+.auth-error { font-size: 13px; color: #DB2777; }
 
 /* sign-out: small, secondary, subordinate to Add */
 .signout-cta {
