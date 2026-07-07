@@ -1,8 +1,7 @@
-import { get, set, del } from 'idb-keyval'
+import { get, set } from 'idb-keyval'
 
+// Memories list stays local (idb-keyval); only media blobs move to Cloudinary.
 const LIST_KEY = 'moments:list'
-const THUMB_MAX = 800     // long-edge px for the card + orbit thumbnails
-const THUMB_QUALITY = 0.8 // JPEG quality for thumbnails
 
 export async function loadMemories() {
   return (await get(LIST_KEY)) || null
@@ -12,99 +11,81 @@ export async function saveMemories(list) {
   await set(LIST_KEY, list)
 }
 
-// Downscale an image blob to a small JPEG thumbnail (long edge THUMB_MAX).
-// Returns null if it can't be decoded (caller falls back to the original).
-export async function makeThumbnail(blob) {
-  try {
-    // honour EXIF orientation so the thumbnail matches the upright full-res image
-    // (an <img> auto-orients; createImageBitmap does NOT unless asked) — otherwise
-    // portrait phone photos render sideways in the cards/orbit and look distorted.
-    const bmp = await createImageBitmap(blob, { imageOrientation: 'from-image' })
-    const scale = Math.min(1, THUMB_MAX / Math.max(bmp.width, bmp.height))
-    const w = Math.max(1, Math.round(bmp.width * scale))
-    const h = Math.max(1, Math.round(bmp.height * scale))
-    const canvas = document.createElement('canvas')
-    canvas.width = w
-    canvas.height = h
-    canvas.getContext('2d').drawImage(bmp, 0, 0, w, h)
-    bmp.close?.()
-    const out = await new Promise((res) => canvas.toBlob(res, 'image/jpeg', THUMB_QUALITY))
-    return out || null
-  } catch {
-    return null // undecodable (e.g. HEIC on some browsers) — fall back to original
-  }
-}
+// ---- Cloudinary media storage ----------------------------------------------
+const CLOUD_NAME = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME
+const PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET
 
-// Persist a media blob. For images, also generate + store a small thumbnail
-// under `thumb:<id>` so cards/orbit never decode the full-resolution original.
-// Video/audio store only the original (no thumbnail).
-export async function saveImageMedia(id, blob, kind) {
-  if (kind !== 'image') { await set('img:' + id, blob); return }
-  // the original write and the thumbnail decode are independent — overlap them
-  const [, thumb] = await Promise.all([set('img:' + id, blob), makeThumbnail(blob)])
-  if (thumb) await set('thumb:' + id, thumb)
-}
+// public_id (our UUID) -> kind, so imageURL/thumbURL pick the right delivery
+// type. In-memory only: after a reload it's empty and we default to 'image'.
+const kinds = new Map()
 
-// Delete an image + its thumbnail, and revoke/drop any cached object URLs.
-export async function deleteImage(id) {
-  revokeURL('img:' + id)
-  revokeURL('thumb:' + id)
-  await del('img:' + id)
-  await del('thumb:' + id)
-}
-
-// storageKey ('img:<id>' | 'thumb:<id>') -> object URL
+// cacheKey ('img:<id>' | 'thumb:<id>') -> Cloudinary URL string
 const urlCache = new Map()
 
-// cache an object URL for a blob, deduping if a concurrent caller beat us to it
-function cacheURL(key, blob) {
-  const url = URL.createObjectURL(blob)
-  if (urlCache.has(key)) { URL.revokeObjectURL(url); return urlCache.get(key) }
-  urlCache.set(key, url)
-  return url
+// image assets deliver from /image/upload; video AND audio from /video/upload.
+// Unknown kind (e.g. after a reload cleared the Map) defaults to image.
+const deliveryType = (id) => {
+  const k = kinds.get(id)
+  return k === 'video' || k === 'audio' ? 'video' : 'image'
 }
 
-async function urlForKey(key) {
-  if (urlCache.has(key)) return urlCache.get(key)
-  const blob = await get(key)
-  if (!blob) return null
-  return cacheURL(key, blob)
+// Upload a media blob to Cloudinary via the unsigned upload endpoint. `auto`
+// resource type accepts image, video, and audio through one endpoint. We reuse
+// our own UUID as the public_id so the delivery URL is reconstructable on any
+// reload with no extra stored data. Throws on failure so the caller can catch.
+export async function saveImageMedia(id, blob, kind) {
+  kinds.set(id, kind)
+  const form = new FormData()
+  form.append('file', blob)
+  form.append('upload_preset', PRESET)
+  form.append('public_id', id)
+  const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/auto/upload`, {
+    method: 'POST',
+    body: form,
+  })
+  if (!res.ok) {
+    const detail = await res.text().catch(() => '')
+    throw new Error(`Cloudinary upload failed (${res.status}): ${detail}`)
+  }
+  return res.json()
+}
+
+// Cloudinary deletion needs the API secret (unsafe in the browser), so we only
+// drop local caches — the remote asset is left in place.
+export async function deleteImage(id) {
+  urlCache.delete('img:' + id)
+  urlCache.delete('thumb:' + id)
+  kinds.delete(id)
 }
 
 // Full-resolution original — ONLY the lightbox should use this.
 export async function imageURL(id) {
   if (!id) return null
-  return urlForKey('img:' + id)
+  const key = 'img:' + id
+  if (urlCache.has(key)) return urlCache.get(key)
+  const url = `https://res.cloudinary.com/${CLOUD_NAME}/${deliveryType(id)}/upload/${id}`
+  urlCache.set(key, url)
+  return url
 }
 
-// Small thumbnail — cards + orbit use this. Prefers `thumb:<id>`; for memories
-// saved before thumbnails existed, lazily generates one from the original (and
-// persists it), falling back to the original URL only if generation fails.
+// Small thumbnail — cards + orbit use this. Cloudinary resizes images on the
+// fly (w_800, quality/format auto); video/audio have no image transform so they
+// deliver the same URL as the original.
 export async function thumbURL(id) {
   if (!id) return null
   const key = 'thumb:' + id
   if (urlCache.has(key)) return urlCache.get(key)
-  let blob = await get(key)
-  if (!blob) {
-    const orig = await get('img:' + id)
-    if (!orig) return null
-    blob = await makeThumbnail(orig)
-    if (blob) await set(key, blob)
-    else return imageURL(id) // generation failed — show the original
-  }
-  if (urlCache.has(key)) return urlCache.get(key)
-  return cacheURL(key, blob)
+  const url = deliveryType(id) === 'image'
+    ? `https://res.cloudinary.com/${CLOUD_NAME}/image/upload/w_800,c_limit,q_auto,f_auto/${id}`
+    : `https://res.cloudinary.com/${CLOUD_NAME}/video/upload/${id}`
+  urlCache.set(key, url)
+  return url
 }
 
-// Revoke a single cached object URL by storage key.
-export function revokeURL(key) {
-  const url = urlCache.get(key)
-  if (url) { URL.revokeObjectURL(url); urlCache.delete(key) }
-}
-
-// Revoke just the heavy full-res original (e.g. when the lightbox closes) —
-// the card thumbnail (a different key) stays cached.
-export function revokeOriginal(id) { revokeURL('img:' + id) }
+// Cloudinary URLs are plain strings — nothing to revoke. Kept as no-ops so the
+// existing callers (App.jsx, Lightbox.jsx) don't break.
+export function revokeURL() {}
+export function revokeOriginal() {}
 
 export const COLORS = {
   blue:   { bg: '#DBE9FC', text: '#2563EB' },
