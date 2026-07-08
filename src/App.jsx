@@ -783,7 +783,7 @@ export default function App() {
   pendingSeeds.current = []
 
   return (
-    <div className="viewport" onDragOver={(e) => e.preventDefault()} onDrop={onDrop}>
+    <div className={`viewport ${session ? '' : 'viewport-demo'}`} onDragOver={(e) => e.preventDefault()} onDrop={onDrop}>
       {/* Both views stay MOUNTED and cross-fade — remounting the 3D canvas on
           every Months↔Years switch (WebGL context + shaders + textures) was the
           source of the switch lag. But once a crossfade COMPLETES the inactive

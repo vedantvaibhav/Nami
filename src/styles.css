@@ -28,6 +28,9 @@ body {
 .view-layer {
   position: absolute; inset: 0;
 }
+/* demo mode (signed out): the fixed DemoNav sits on top, so start the product
+   below it instead of letting the navbar crop the month markers. */
+.viewport-demo .view-layer { top: 64px; }
 /* the inactive layer stays painted (opacity 0) for a smooth crossfade, but must
    not capture pointer/scroll. !important is required: R3F sets an inline
    pointer-events:auto on its <canvas> that would otherwise win over the wrapper. */
