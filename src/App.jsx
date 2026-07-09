@@ -80,7 +80,12 @@ function DemoNav({ onSignIn }) {
           <path fill="#EA4335" d="M9 3.58c1.32 0 2.51.45 3.44 1.35l2.58-2.59C13.46.89 11.43 0 9 0A9 9 0 0 0 .96 4.96l3.01 2.33C4.68 5.16 6.66 3.58 9 3.58z" />
         </svg>
         <span>Login</span>
-        <span className="demo-login-chev" aria-hidden="true">→</span>
+        <span className="demo-login-chev" aria-hidden="true">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M5 12h14" />
+            <path d="M13 6l6 6-6 6" />
+          </svg>
+        </span>
       </button>
     </div>
   )
