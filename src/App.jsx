@@ -66,26 +66,21 @@ const DEMO_MEMORIES = [
   { id: 'demo-6', type: 'note', title: 'Rooftop dinner', body: 'Golden hour over the city', date: '2024-06-28', color: 'pink', media: [] },
 ]
 
-// Solid top nav (no gradient/blur) with a bottom border, over the live demo
-// timeline when signed out.
+// Solid top nav (no gradient/blur) with a bottom border matching the month
+// gridlines, over the live demo timeline when signed out.
 function DemoNav({ onSignIn }) {
   return (
-    <div style={{
-      position: 'fixed', top: 0, left: 0, right: 0, zIndex: 9999,
-      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-      padding: '14px 28px',
-      background: '#FDFDFC',
-      borderBottom: '1px solid #E3E5EA',
-    }}>
-      <span style={{ fontFamily: '"Helvetica Neue", Helvetica, Arial, sans-serif', fontSize: 20, fontWeight: 600, letterSpacing: '0.01em', color: '#16181D' }}>Nami</span>
-      <button onClick={onSignIn} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontFamily: 'Inter, sans-serif', fontSize: 13, fontWeight: 500, color: '#fff', background: '#16181D', border: 'none', borderRadius: 20, padding: '8px 18px', cursor: 'pointer' }}>
-        <svg width="15" height="15" viewBox="0 0 18 18" aria-hidden="true" style={{ display: 'block' }}>
+    <div className="demo-nav">
+      <span className="demo-brand">Nami</span>
+      <button className="demo-login" onClick={onSignIn}>
+        <svg className="demo-login-logo" width="16" height="16" viewBox="0 0 18 18" aria-hidden="true">
           <path fill="#4285F4" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.92c1.7-1.57 2.68-3.88 2.68-6.62z" />
           <path fill="#34A853" d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.92-2.26c-.8.54-1.83.86-3.04.86-2.34 0-4.32-1.58-5.03-3.71H.96v2.33A9 9 0 0 0 9 18z" />
           <path fill="#FBBC05" d="M3.97 10.71a5.41 5.41 0 0 1 0-3.42V4.96H.96a9 9 0 0 0 0 8.08l3.01-2.33z" />
           <path fill="#EA4335" d="M9 3.58c1.32 0 2.51.45 3.44 1.35l2.58-2.59C13.46.89 11.43 0 9 0A9 9 0 0 0 .96 4.96l3.01 2.33C4.68 5.16 6.66 3.58 9 3.58z" />
         </svg>
-        Login Google
+        <span>Login</span>
+        <span className="demo-login-chev" aria-hidden="true">→</span>
       </button>
     </div>
   )
@@ -309,7 +304,7 @@ export default function App() {
     const read = () => {
       const el = zoomIdRef.current === 'years' ? null : scrollRef.current
       const frac = el ? el.clientWidth / el.scrollWidth : 1
-      const w = Math.max(64, Math.min(TRACK_W, Math.round(TRACK_W * frac)))
+      const w = Math.max(88, Math.min(TRACK_W, Math.round(TRACK_W * frac))) // min keeps ≥8px padding around the label
       const maxScroll = el ? el.scrollWidth - el.clientWidth : 0
       const p = el && maxScroll > 0 ? el.scrollLeft / maxScroll : 0
       return { w, x: p * (TRACK_W - w) }

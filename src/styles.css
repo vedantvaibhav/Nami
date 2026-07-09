@@ -31,6 +31,34 @@ body {
 /* demo mode (signed out): the fixed DemoNav sits on top, so start the product
    below it instead of letting the navbar crop the month markers. */
 .viewport-demo .view-layer { top: 64px; }
+
+/* ---- demo nav (signed-out top bar) ---- */
+.demo-nav {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 9999;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 28px; background: #FDFDFC;
+  border-bottom: 1px solid #F1F1EF; /* same as the month gridlines */
+}
+.demo-brand {
+  font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  font-size: 20px; font-weight: 600; letter-spacing: 0.01em; color: #16181D;
+}
+.demo-login {
+  display: inline-flex; align-items: center; gap: 7px;
+  /* logo sits an equal 8px from the top and the left */
+  padding: 8px 14px 8px 8px;
+  background: transparent; border: none; border-radius: 20px; cursor: pointer;
+  font-family: 'Inter', sans-serif; font-size: 13px; font-weight: 500; color: #9AA0AC;
+  transition: color 0.15s, background 0.15s;
+}
+.demo-login:hover { color: #16181D; background: #F1F1EF; }
+.demo-login-logo { display: block; flex-shrink: 0; }
+.demo-login-chev {
+  display: inline-block; overflow: hidden;
+  max-width: 0; opacity: 0; transform: translateX(-4px);
+  transition: max-width 0.22s ease, opacity 0.22s ease, transform 0.22s ease;
+}
+.demo-login:hover .demo-login-chev { max-width: 14px; opacity: 1; transform: translateX(0); }
 /* the inactive layer stays painted (opacity 0) for a smooth crossfade, but must
    not capture pointer/scroll. !important is required: R3F sets an inline
    pointer-events:auto on its <canvas> that would otherwise win over the wrapper. */
@@ -427,7 +455,7 @@ body {
 .zoom-pill {
   position: absolute; left: 0; top: 0;
   background: #16181D; color: #fff; font-size: 13px; font-weight: 600;
-  border-radius: 999px; height: 30px;
+  border-radius: 999px; height: 30px; padding: 0 8px;
   display: flex; align-items: center; justify-content: center;
   overflow: hidden; white-space: nowrap;
   cursor: grab; touch-action: none;
