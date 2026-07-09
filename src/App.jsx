@@ -118,6 +118,7 @@ export default function App() {
   // = signed in. The render gate below uses these three states.
   const [session, setSession] = useState(undefined)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const signingOut = useRef(false)
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setSession(data.session))
     const { data: sub } = supabase.auth.onAuthStateChange((_event, s) => setSession(s))
@@ -125,7 +126,15 @@ export default function App() {
   }, [])
   const signInWithGoogle = () =>
     supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: window.location.origin } })
-  const handleSignOut = () => { setSettingsOpen(false); supabase.auth.signOut() }
+  // Sign out, then hard-reload so the app lands on a FRESH demo state. A same-
+  // page swap (real memories → demo) morphed the orbit in place — cards stretched
+  // and content stayed stale until scroll. A reload sidesteps that entirely.
+  const handleSignOut = async () => {
+    setSettingsOpen(false)
+    signingOut.current = true // the SIGNED_OUT event fires before the reload — don't swap to demo in place
+    await supabase.auth.signOut()
+    window.location.reload()
+  }
   const [dockDims, setDockDims] = useState({ toolbarW: 462, composerH: 450 })
   const scrollRef = useRef(null)
 
@@ -191,6 +200,8 @@ export default function App() {
 
   // ---- load / persist -------------------------------------------------
   useEffect(() => {
+    if (signingOut.current) return // reload imminent — don't morph the orbit to demo in place
+    if (session === undefined) return // still resolving — stay on boot-blank, don't flash demo
     if (!session) { setMemories(DEMO_MEMORIES); return } // logged out: read-only demo timeline
     loadMemories(session.user.id).then((saved) => {
       // start empty — only days the user actually adds to will appear
