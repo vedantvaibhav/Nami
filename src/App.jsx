@@ -78,8 +78,14 @@ function DemoNav({ onSignIn }) {
       borderBottom: '1px solid #E3E5EA',
     }}>
       <span style={{ fontFamily: '"Helvetica Neue", Helvetica, Arial, sans-serif', fontSize: 20, fontWeight: 600, letterSpacing: '0.01em', color: '#16181D' }}>Nami</span>
-      <button onClick={onSignIn} style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, fontWeight: 500, color: '#fff', background: '#16181D', border: 'none', borderRadius: 20, padding: '8px 20px', cursor: 'pointer' }}>
-        Sign in with Google →
+      <button onClick={onSignIn} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontFamily: 'Inter, sans-serif', fontSize: 13, fontWeight: 500, color: '#fff', background: '#16181D', border: 'none', borderRadius: 20, padding: '8px 18px', cursor: 'pointer' }}>
+        <svg width="15" height="15" viewBox="0 0 18 18" aria-hidden="true" style={{ display: 'block' }}>
+          <path fill="#4285F4" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.92c1.7-1.57 2.68-3.88 2.68-6.62z" />
+          <path fill="#34A853" d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.92-2.26c-.8.54-1.83.86-3.04.86-2.34 0-4.32-1.58-5.03-3.71H.96v2.33A9 9 0 0 0 9 18z" />
+          <path fill="#FBBC05" d="M3.97 10.71a5.41 5.41 0 0 1 0-3.42V4.96H.96a9 9 0 0 0 0 8.08l3.01-2.33z" />
+          <path fill="#EA4335" d="M9 3.58c1.32 0 2.51.45 3.44 1.35l2.58-2.59C13.46.89 11.43 0 9 0A9 9 0 0 0 .96 4.96l3.01 2.33C4.68 5.16 6.66 3.58 9 3.58z" />
+        </svg>
+        Login Google
       </button>
     </div>
   )
@@ -706,7 +712,11 @@ export default function App() {
     if (toolbarRef.current) ro.observe(toolbarRef.current)
     if (composerRef.current) ro.observe(composerRef.current)
     return () => ro.disconnect()
-  }, [composerKey, zoomIdx, memories])
+    // `session` matters: the dock only mounts once the session resolves, and in
+    // demo mode `memories` is set while session is still loading — so without
+    // this the toolbar was never re-measured when the dock appeared and the
+    // shell kept its stale default width (extra side padding until a zoom click).
+  }, [composerKey, zoomIdx, memories, session])
 
   // Persist dropped/picked/pasted files as blobs, attach refs to the card
   const attachFiles = async (id, files) => {
