@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
 import { cardDateLabel } from './time.js'
 import { fmtTime, icons, inferType, seededBars } from './media.js'
-import { Icon, useImage } from './MemoryCard.jsx'
+import { Icon, useImage, useThumb } from './MemoryCard.jsx'
 import { revokeOriginal } from './store.js'
 
 // ---- photo: overlapping collage of prints (Amie "Meet Eric/Antoine" style) ----
@@ -44,18 +44,21 @@ function PhotoExpand({ m }) {
 }
 
 function CollageImg({ id, i, slot }) {
-  const url = useImage(id)
-  if (!url) return null
+  const thumb = useThumb(id) // cached from the card — shows instantly
+  const full = useImage(id) // optimized full-res — fades in when it arrives
+  const [ready, setReady] = useState(false)
+  if (!thumb && !full) return null
   return (
-    <motion.img
-      className="lb-collage-img"
-      src={url}
-      alt=""
+    <motion.div
+      className="lb-collage-slot"
       style={{ left: `${slot.left}%`, top: `${slot.top}%`, width: `${slot.w}%`, zIndex: slot.z }}
       initial={{ opacity: 0, scale: 0.82, rotate: 0, x: '-50%', y: '-50%' }}
       animate={{ opacity: 1, scale: 1, rotate: slot.r, x: '-50%', y: '-50%' }}
       transition={{ type: 'spring', stiffness: 240, damping: 22, delay: 0.05 * i }}
-    />
+    >
+      {thumb && <img className="lb-collage-img" src={thumb} alt="" style={{ filter: ready ? 'none' : 'blur(6px)' }} />}
+      {full && <img className="lb-collage-img lb-collage-full" src={full} alt="" onLoad={() => setReady(true)} style={{ opacity: ready ? 1 : 0 }} />}
+    </motion.div>
   )
 }
 
