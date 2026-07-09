@@ -55,6 +55,27 @@ const collateColumn = (items, view) => {
   return view === 'months' ? sorted.slice(0, MONTHS_VIEW_MAX) : sorted
 }
 
+// The ordered column keys for a view. Days is sparse (only days with memories);
+// Months is continuous (every month from the earliest year to now). Both fall
+// back to a placeholder scaffold when empty so the canvas is never blank. Shared
+// by the `columns` memo and the zoom shrink-test so the two can't diverge.
+const columnKeys = (memories, view) => {
+  if (!memories) return []
+  if (view === 'months') {
+    if (!memories.length) return currentYearMonths()
+    const today = new Date()
+    let earliestYear = today.getFullYear()
+    for (const m of memories) earliestYear = Math.min(earliestYear, fromISO(m.date).getFullYear())
+    const keys = []
+    let d = new Date(earliestYear, 0, 1)
+    const end = new Date(today.getFullYear(), today.getMonth(), 1)
+    while (d <= end) { keys.push(toISO(d)); d = new Date(d.getFullYear(), d.getMonth() + 1, 1) }
+    return keys
+  }
+  const keys = [...new Set(memories.map((m) => unitStart(m.date, view)))].sort()
+  return keys.length ? keys : currentMonthDays()
+}
+
 // Shown to logged-out visitors so the product is visible immediately (read-only —
 // never written to Supabase). Placeholder entries; real Cloudinary media later.
 const DEMO_MEMORIES = [
@@ -254,26 +275,7 @@ export default function App() {
       if (!groups.has(k)) groups.set(k, [])
       groups.get(k).push(m)
     }
-
-    let keys
-    if (view2d === 'months') {
-      if (!memories.length) {
-        keys = currentYearMonths() // empty state: all 12 months of this year
-      } else {
-        const today = new Date()
-        let earliestYear = today.getFullYear()
-        for (const m of memories) earliestYear = Math.min(earliestYear, fromISO(m.date).getFullYear())
-        keys = []
-        let d = new Date(earliestYear, 0, 1)
-        const end = new Date(today.getFullYear(), today.getMonth(), 1)
-        while (d <= end) { keys.push(toISO(d)); d = new Date(d.getFullYear(), d.getMonth() + 1, 1) }
-      }
-    } else {
-      keys = [...groups.keys()].sort() // ISO dates sort chronologically
-      if (!keys.length) keys = currentMonthDays() // empty state: this month's days
-    }
-
-    return keys.map((k, i) => {
+    return columnKeys(memories, view2d).map((k, i) => {
       // chronological within a column; Months collates to the first few (see collateColumn)
       const items = collateColumn(groups.get(k) || [], view2d)
       return { key: k, colX: i * COL_W, colW: COL_W, items }
@@ -412,16 +414,25 @@ export default function App() {
 
   const pendingCenter = useRef(null)
   const pendingCenterDate = useRef(null)
-  // snap card layout across a zoom (no layoutId flight): the canvas width and
-  // scroll change together on a switch, so a flight would animate to a scroll-
-  // shifted position and then correct — a visible flicker (worst on Months→Days,
-  // where the canvas shrinks and the browser clamps scrollLeft first).
+  // Snap card layout across a zoom (no layoutId flight) ONLY when it would
+  // flicker: if the target view's canvas is narrower than the current scroll
+  // position, the browser clamps scrollLeft before we restore it, so a flight
+  // would glide to that clamped spot and then correct — a visible jump (the
+  // Months→Days case). When the canvas grows instead (the zoom-out the eye
+  // follows), no clamp happens and layoutScroll keeps the flight honest, so we
+  // let the cards fly.
   const zoomSnap = useRef(false)
+  const willClampOnZoom = (targetView) => {
+    const el = scrollRef.current
+    if (!el || targetView === 'years' || zoom.id === 'years') return false
+    const newMax = Math.max(0, columnKeys(memories, targetView).length * COL_W - el.clientWidth)
+    return el.scrollLeft > newMax + 0.5
+  }
   const setZoomKeepCenter = (idx) => {
     const el = scrollRef.current
     pendingCenter.current = null
     pendingCenterDate.current = null
-    zoomSnap.current = true
+    zoomSnap.current = willClampOnZoom(ZOOMS[idx].id)
     // Keep you where your memories are across a zoom. From a 2D view (days/
     // months), anchor on the DATE at the viewport centre — so zooming out lands
     // on the month that actually holds that day, not back at fraction 0 (Jan).
