@@ -44,22 +44,24 @@ body {
   font-size: 20px; font-weight: 600; letter-spacing: 0.01em; color: #16181D;
 }
 .demo-login {
-  display: inline-flex; align-items: center; gap: 7px;
+  display: inline-flex; align-items: center;
   /* logo sits an equal 8px from the top and the left */
-  padding: 8px 14px 8px 8px;
+  padding: 8px 12px 8px 8px;
   background: #F1F1EF; border: none; border-radius: 20px; cursor: pointer; /* fill always on */
   font-family: 'Inter', sans-serif; font-size: 13px; font-weight: 500; color: #6B7280;
   transition: color 0.15s, background 0.15s;
 }
 .demo-login:hover { color: #16181D; background: #E8EAED; }
-.demo-login-logo { display: block; flex-shrink: 0; }
+.demo-login-logo { display: block; flex-shrink: 0; margin-right: 7px; }
+/* no flex gap: the chevron owns its own (animated) left margin so at rest it
+   reserves ZERO space — otherwise the gap padded the right edge even collapsed */
 .demo-login-chev {
   display: inline-flex; align-items: center; overflow: hidden;
-  max-width: 0; opacity: 0; transform: translateX(-4px);
-  transition: max-width 0.22s ease, opacity 0.22s ease, transform 0.22s ease;
+  max-width: 0; margin-left: 0; opacity: 0; transform: translateX(-4px);
+  transition: max-width 0.22s ease, margin-left 0.22s ease, opacity 0.22s ease, transform 0.22s ease;
 }
 .demo-login-chev svg { display: block; }
-.demo-login:hover .demo-login-chev { max-width: 16px; opacity: 1; transform: translateX(0); }
+.demo-login:hover .demo-login-chev { max-width: 16px; margin-left: 6px; opacity: 1; transform: translateX(0); }
 /* the inactive layer stays painted (opacity 0) for a smooth crossfade, but must
    not capture pointer/scroll. !important is required: R3F sets an inline
    pointer-events:auto on its <canvas> that would otherwise win over the wrapper. */
