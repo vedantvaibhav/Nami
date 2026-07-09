@@ -928,7 +928,7 @@ export default function App() {
       >
         <YearOrbit
           memories={memories}
-          active={orbitLive}
+          active={isYears || orbitLive}
           revealed={booted}
         />
       </motion.div>

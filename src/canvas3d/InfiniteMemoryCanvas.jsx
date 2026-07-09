@@ -79,19 +79,10 @@ function getVideoTexture(url, onReady) {
   return texture
 }
 
-// Force a frame whenever the media set changes — signing in swaps the demo
-// memories for the real ones, and without this the scene wasn't repainted until
-// a pointer/scroll woke the render loop (content looked stale until you moved).
-function RenderOnMediaChange({ media }) {
-  const invalidate = useThree((s) => s.invalidate)
-  useEffect(() => { invalidate() }, [media, invalidate])
-  return null
-}
-
 function MediaPlane({ position, scale, item, chunkCx, chunkCy, chunkCz, cameraGridRef, onOpen, introDelay = 0 }) {
   const meshRef = useRef(null)
   const materialRef = useRef(null)
-  const localState = useRef({ opacity: 0, frame: 0, introScaled: false, introDone: false, scaleInit: false })
+  const localState = useRef({ opacity: 0, frame: 0, introScaled: false, introDone: false, scaleInit: false, needsSnap: false })
   const [texture, setTexture] = useState(null)
 
   useFrame(() => {
@@ -129,10 +120,14 @@ function MediaPlane({ position, scale, item, chunkCx, chunkCy, chunkCz, cameraGr
       }
     }
 
-    // after the intro, EASE any size/aspect change (a live media remap when a
-    // photo is added) toward the new target instead of snapping — this is what
-    // stops the whole field from lurching/"trimming down" on upload
-    if (state.introDone) mesh.scale.lerp(displayScale, 0.16)
+    // after the intro: SNAP to the target when this plane was remapped to a
+    // different item (needsSnap) so a full media swap doesn't morph every card's
+    // aspect; otherwise EASE small same-item size refinements (keeps an upload
+    // from lurching/"trimming down").
+    if (state.introDone) {
+      if (state.needsSnap) { mesh.scale.copy(displayScale); state.needsSnap = false }
+      else mesh.scale.lerp(displayScale, 0.16)
+    }
 
     state.frame = (state.frame + 1) & 1
     if (state.opacity < INVIS_THRESHOLD && !mesh.visible && state.frame === 0 && state.introDone) return
@@ -176,7 +171,11 @@ function MediaPlane({ position, scale, item, chunkCx, chunkCy, chunkCz, cameraGr
   useEffect(() => {
     // Don't reset opacity here: on a live media remap that blinked the WHOLE
     // field out and back in. The new texture swaps in at the plane's current
-    // opacity, and the scale eases (see useFrame), so an upload no longer lurches.
+    // opacity so an upload no longer lurches.
+    // needsSnap: this plane was remapped to a DIFFERENT item — snap to its aspect
+    // next frame instead of morphing across two unrelated cards (that "stretch"
+    // was every card lerping to a new aspect on a full media swap / login-logout).
+    localState.current.needsSnap = true
     ;(item.isVideo ? getVideoTexture : getTexture)(item.url, (tex) => setTexture(tex))
   }, [item.url])
 
@@ -466,7 +465,6 @@ export default function InfiniteMemoryCanvas({ media, active = true, revealed = 
       >
         <color attach="background" args={['#FDFDFC']} />
         <fog attach="fog" args={['#FDFDFC', 120, 320]} />
-        <RenderOnMediaChange media={media} />
         <SceneController media={media} onOpen={onOpen} />
       </Canvas>
     </div>
