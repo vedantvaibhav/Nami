@@ -36,22 +36,22 @@ body {
 .view-layer {
   position: absolute; inset: 0;
 }
-/* demo mode (signed out): the fixed DemoNav sits on top, so start the product
-   below it instead of letting the navbar crop the month markers. */
-.viewport-demo .view-layer { top: 64px; }
+/* the persistent fixed top nav sits on top, so start the product below it
+   (signed in AND out) instead of letting the nav crop the month markers. */
+.viewport-with-nav .view-layer { top: 64px; }
 
-/* ---- demo nav (signed-out top bar) ---- */
-.demo-nav {
+/* ---- top nav (persistent) ---- */
+.top-nav {
   position: fixed; top: 0; left: 0; right: 0; z-index: 9999;
   display: flex; align-items: center; justify-content: space-between;
   padding: 14px 28px; background: #FDFDFC;
   border-bottom: 1px solid #F1F1EF; /* same as the month gridlines */
 }
-.demo-brand {
+.nav-brand {
   font-family: 'Neulis', 'Helvetica Neue', Helvetica, Arial, sans-serif;
   font-size: 22px; font-weight: 600; letter-spacing: 0.01em; color: #16181D;
 }
-.demo-login {
+.nav-login {
   display: inline-flex; align-items: center;
   /* logo sits an equal 8px from the top and the left */
   padding: 8px 12px 8px 8px;
@@ -59,17 +59,27 @@ body {
   font-family: 'Inter', sans-serif; font-size: 13px; font-weight: 500; color: #6B7280;
   transition: color 0.15s, background 0.15s;
 }
-.demo-login:hover { color: #16181D; background: #E8EAED; }
-.demo-login-logo { display: block; flex-shrink: 0; margin-right: 7px; }
+.nav-login:hover { color: #16181D; background: #E8EAED; }
+.nav-login-logo { display: block; flex-shrink: 0; margin-right: 7px; }
 /* no flex gap: the chevron owns its own (animated) left margin so at rest it
    reserves ZERO space — otherwise the gap padded the right edge even collapsed */
-.demo-login-chev {
+.nav-login-chev {
   display: inline-flex; align-items: center; overflow: hidden;
   max-width: 0; margin-left: 0; opacity: 0; transform: translateX(-4px);
   transition: max-width 0.22s ease, margin-left 0.22s ease, opacity 0.22s ease, transform 0.22s ease;
 }
-.demo-login-chev svg { display: block; }
-.demo-login:hover .demo-login-chev { max-width: 16px; margin-left: 6px; opacity: 1; transform: translateX(0); }
+.nav-login-chev svg { display: block; }
+.nav-login:hover .nav-login-chev { max-width: 16px; margin-left: 6px; opacity: 1; transform: translateX(0); }
+
+/* profile avatar (signed in) — right slot of the nav */
+.nav-avatar {
+  width: 32px; height: 32px; border-radius: 50%; padding: 0; border: none; cursor: pointer;
+  overflow: hidden; background: #ECEEF1; display: grid; place-items: center;
+  transition: transform 0.12s;
+}
+.nav-avatar:hover { transform: scale(1.04); }
+.nav-avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.nav-avatar span { font-size: 13px; font-weight: 600; color: #4A5160; }
 /* the inactive layer stays painted (opacity 0) for a smooth crossfade, but must
    not capture pointer/scroll. !important is required: R3F sets an inline
    pointer-events:auto on its <canvas> that would otherwise win over the wrapper. */
@@ -553,17 +563,6 @@ body {
   /* big upload block + composer breathe a little less on small screens */
   .composer { padding: 14px; gap: 12px; }
 }
-
-/* ---- profile avatar (top-right, signed in) ---- */
-.profile-btn {
-  position: fixed; top: 20px; right: 20px; z-index: 40;
-  width: 32px; height: 32px; border-radius: 50%; padding: 0; border: none; cursor: pointer;
-  overflow: hidden; background: #ECEEF1; display: grid; place-items: center;
-  transition: transform 0.12s;
-}
-.profile-btn:hover { transform: scale(1.04); }
-.profile-btn img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.profile-btn span { font-size: 13px; font-weight: 600; color: #4A5160; }
 
 /* ---- settings panel (modal) ---- */
 .settings-backdrop {
