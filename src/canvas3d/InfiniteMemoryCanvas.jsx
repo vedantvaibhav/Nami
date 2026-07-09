@@ -79,6 +79,15 @@ function getVideoTexture(url, onReady) {
   return texture
 }
 
+// Force a frame whenever the media set changes — signing in swaps the demo
+// memories for the real ones, and without this the scene wasn't repainted until
+// a pointer/scroll woke the render loop (content looked stale until you moved).
+function RenderOnMediaChange({ media }) {
+  const invalidate = useThree((s) => s.invalidate)
+  useEffect(() => { invalidate() }, [media, invalidate])
+  return null
+}
+
 function MediaPlane({ position, scale, item, chunkCx, chunkCy, chunkCz, cameraGridRef, onOpen, introDelay = 0 }) {
   const meshRef = useRef(null)
   const materialRef = useRef(null)
@@ -457,6 +466,7 @@ export default function InfiniteMemoryCanvas({ media, active = true, revealed = 
       >
         <color attach="background" args={['#FDFDFC']} />
         <fog attach="fog" args={['#FDFDFC', 120, 320]} />
+        <RenderOnMediaChange media={media} />
         <SceneController media={media} onOpen={onOpen} />
       </Canvas>
     </div>
