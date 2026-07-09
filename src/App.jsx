@@ -412,10 +412,16 @@ export default function App() {
 
   const pendingCenter = useRef(null)
   const pendingCenterDate = useRef(null)
+  // snap card layout across a zoom (no layoutId flight): the canvas width and
+  // scroll change together on a switch, so a flight would animate to a scroll-
+  // shifted position and then correct — a visible flicker (worst on Months→Days,
+  // where the canvas shrinks and the browser clamps scrollLeft first).
+  const zoomSnap = useRef(false)
   const setZoomKeepCenter = (idx) => {
     const el = scrollRef.current
     pendingCenter.current = null
     pendingCenterDate.current = null
+    zoomSnap.current = true
     // Keep you where your memories are across a zoom. From a 2D view (days/
     // months), anchor on the DATE at the viewport centre — so zooming out lands
     // on the month that actually holds that day, not back at fraction 0 (Jan).
@@ -452,7 +458,9 @@ export default function App() {
       el.scrollLeft = pendingCenter.current * (el.scrollWidth - el.clientWidth)
       pendingCenter.current = null
     }
-    const raf = requestAnimationFrame(() => syncThumb(true))
+    // layout + scroll are now settled for the new view; resume animated layout
+    // for subsequent changes (drag, add). The switch itself already snapped.
+    const raf = requestAnimationFrame(() => { zoomSnap.current = false; syncThumb(true) })
     return () => cancelAnimationFrame(raf)
   }, [zoomIdx, widthPx, syncThumb])
 
@@ -915,7 +923,7 @@ export default function App() {
                       manual={isManual}
                       manualY={top}
                       yMV={cardYMV(m.id)}
-                      instantLayout={dragActive.current}
+                      instantLayout={dragActive.current || zoomSnap.current}
                       getDragBounds={getDragBounds}
                       onDragStart={onCardDragStart}
                       onDragEnd={commitDrag}
