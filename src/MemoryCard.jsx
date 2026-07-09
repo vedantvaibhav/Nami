@@ -132,7 +132,7 @@ const MemoryCard = forwardRef(function MemoryCard({
   // ref): the layout transition snaps so projection can't fight the gesture.
   // `getDragBounds(id)` is called once per gesture (at the drag threshold) so
   // no per-render DOM reads are needed to keep the drag clamped on-screen.
-  manual = false, manualY = 0, yMV, getDragBounds, instantLayout = false,
+  manual = false, manualY = 0, scatterX = 0, scatterRot = 0, yMV, getDragBounds, instantLayout = false,
   onDragStart, onDragEnd, onDragCancel,
   onDelete, onEdit, onOpen,
 }, ref) {
@@ -213,7 +213,11 @@ const MemoryCard = forwardRef(function MemoryCard({
   const style = {
     ...(isQuote ? {} : { background: color.bg }),
     ...(manual
-      ? { position: 'absolute', top: manualY, left: 0, width: '100%', y: yMV }
+      // absolute at the committed/seeded top + transient drag offset (yMV). In
+      // months-view scatter, scatterX/scatterRot add a small horizontal nudge
+      // and subtle tilt so the wall reads hand-arranged; both are 0 for dragged
+      // (manual) columns, so a placed card sits square.
+      ? { position: 'absolute', top: manualY, left: 0, width: '100%', x: scatterX, y: yMV, rotate: scatterRot }
       : { marginTop: scatter }),
   }
 

@@ -9,7 +9,7 @@ import Composer from './Composer.jsx'
 import SettingsPanel from './SettingsPanel.jsx'
 import { supabase, userProfile } from './supabase.js'
 import { loadMemories, saveMemories, saveImageMedia, cachePreview, deleteImage, randomColorKey } from './store.js'
-import { kindFromMime, MAX_SAFE_BYTES } from './media.js'
+import { kindFromMime, MAX_SAFE_BYTES, seedFrac } from './media.js'
 import { ZOOMS, markerLabel, toISO, fromISO, unitStart, currentMonthDays, currentYearMonths } from './time.js'
 
 const MARKER_H = 130 // px reserved at top for date markers
@@ -414,25 +414,21 @@ export default function App() {
 
   const pendingCenter = useRef(null)
   const pendingCenterDate = useRef(null)
-  // Snap card layout across a zoom (no layoutId flight) ONLY when it would
-  // flicker: if the target view's canvas is narrower than the current scroll
-  // position, the browser clamps scrollLeft before we restore it, so a flight
-  // would glide to that clamped spot and then correct — a visible jump (the
-  // Months→Days case). When the canvas grows instead (the zoom-out the eye
-  // follows), no clamp happens and layoutScroll keeps the flight honest, so we
-  // let the cards fly.
-  const zoomSnap = useRef(false)
-  const willClampOnZoom = (targetView) => {
-    const el = scrollRef.current
-    if (!el || targetView === 'years' || zoom.id === 'years') return false
-    const newMax = Math.max(0, columnKeys(memories, targetView).length * COL_W - el.clientWidth)
-    return el.scrollLeft > newMax + 0.5
-  }
+  // The flicker on a shrinking zoom (Months→Days) was never the flight itself —
+  // it was the browser AUTO-CLAMPING scrollLeft the instant the narrower canvas
+  // commits, before our restore lands, so the cards were measured against a
+  // clamped scroll for one frame. We defeat the clamp at the source: hold the
+  // canvas at least as wide as it was BEFORE the switch for the switch commit,
+  // restore scroll under that wide canvas (no clamp is possible), then release
+  // the floor on the next frame. With no clamp there's nothing to hide, so the
+  // shared-layout flight stays on in BOTH directions (framer's layoutScroll
+  // absorbs the release-frame re-narrowing — a pure scroll change, not a move).
+  const [zoomWidthFloor, setZoomWidthFloor] = useState(0)
   const setZoomKeepCenter = (idx) => {
     const el = scrollRef.current
     pendingCenter.current = null
     pendingCenterDate.current = null
-    zoomSnap.current = willClampOnZoom(ZOOMS[idx].id)
+    setZoomWidthFloor(el ? el.scrollWidth : 0)
     // Keep you where your memories are across a zoom. From a 2D view (days/
     // months), anchor on the DATE at the viewport centre — so zooming out lands
     // on the month that actually holds that day, not back at fraction 0 (Jan).
@@ -469,9 +465,15 @@ export default function App() {
       el.scrollLeft = pendingCenter.current * (el.scrollWidth - el.clientWidth)
       pendingCenter.current = null
     }
-    // layout + scroll are now settled for the new view; resume animated layout
-    // for subsequent changes (drag, add). The switch itself already snapped.
-    const raf = requestAnimationFrame(() => { zoomSnap.current = false; syncThumb(true) })
+    // layout + scroll are now settled for the new view. Next frame: drop the
+    // width floor so the canvas returns to its true width (the flight is already
+    // gliding, so re-narrowing here reads as a pure scroll change that
+    // layoutScroll absorbs, not a second move), and morph the pill.
+    const raf = requestAnimationFrame(() => {
+      setZoomWidthFloor(0)
+      if (el) el.scrollLeft = Math.min(el.scrollLeft, el.scrollWidth - el.clientWidth)
+      syncThumb(true)
+    })
     return () => cancelAnimationFrame(raf)
   }, [zoomIdx, widthPx, syncThumb])
 
@@ -510,6 +512,23 @@ export default function App() {
     const visible = Math.max(120, window.innerHeight - COL_TOP - DOCK_CLEARANCE)
     return Math.max(0, visible - cardHeight(id))
   }
+
+  // ---- months-view scatter (delight) -----------------------------------
+  // A month column holds only a few cards. Instead of a flat top stack, drop
+  // each into its own vertical BAND at a stable pseudo-random offset, with a
+  // small horizontal nudge and subtle tilt, so the wall reads hand-arranged.
+  // DETERMINISTIC (seeded by id → never jitters between renders) and CLAMPED by
+  // maxTopFor so a card's bottom can never dip under the dock — there is no
+  // vertical scroll. Banding by index keeps the few cards from piling up.
+  const MONTHS_SCATTER_X = 16 // max horizontal nudge (px) inside the column
+  const scatterTopFor = (id, idx, count) => {
+    const colAvail = Math.max(120, window.innerHeight - COL_TOP - DOCK_CLEARANCE)
+    const band = colAvail / Math.max(1, count)
+    const within = seedFrac(id + ':my') * band * 0.66
+    return Math.min(Math.round(idx * band + within), maxTopFor(id))
+  }
+  const scatterXFor = (id) => Math.round((seedFrac(id + ':mx') * 2 - 1) * MONTHS_SCATTER_X)
+  const scatterRotFor = (id) => +((seedFrac(id + ':mr') * 2 - 1) * 1.4).toFixed(2)
 
   // the dragged card's column-mates, derived at event time from fresh data
   const colItemsFor = (id) => {
@@ -864,7 +883,7 @@ export default function App() {
           offset when measuring layoutId flights — without it the programmatic
           scrollLeft restore (same commit) shifted every glide's origin/target */}
       <motion.div className="scroller" ref={scrollRef} layoutScroll>
-        <div className="canvas" style={{ width: widthPx }}>
+        <div className="canvas" style={{ width: Math.max(widthPx, zoomWidthFloor) }}>
           <div className="topline" />
           {columns.map(({ key, colX }) => {
             const d = fromISO(key)
@@ -886,6 +905,15 @@ export default function App() {
               // a column is fully auto (flex stack + scatter) or fully manual
               // (absolute Y per card) for THIS view; the first drag flips it.
               const isManual = isManualCol(items)
+              // A non-manual MONTHS column gets the seeded scatter: cards are
+              // absolutely placed at a banded pseudo-random top (clamped
+              // on-screen) with a small x nudge + tilt. It renders exactly like a
+              // manual column, so the drag/drop system and the Days↔Months flight
+              // need no special-casing — only the initial top differs (seed, not
+              // saved pos). The first drag flips it to a real manual column
+              // (onCardDragStart seeds every card from its live offsetTop, so the
+              // scattered layout is preserved with no jump).
+              const scattered = !isManual && view2d === 'months'
               // cards WITHOUT a saved pos in a manual column (e.g. a memory just
               // added to a hand-arranged day) stack sequentially below the lowest
               // placed card — never at 0, never overlapping. The computed top is
@@ -901,7 +929,7 @@ export default function App() {
               return (
               <div
                 key={key}
-                className={`column ${isManual ? 'column-manual' : ''}`}
+                className={`column ${(isManual || scattered) ? 'column-manual' : ''}`}
                 style={{ left: colX + 8, top: COL_TOP, width: COL_W - 16 }}
               >
                 <AnimatePresence>
@@ -915,6 +943,8 @@ export default function App() {
                     // the drag (getDragBounds) + the drop (commitDrag's inline
                     // clamp): you can never *place* a card off-screen.
                     let top = 0
+                    let nudgeX = 0
+                    let rot = 0
                     if (isManual) {
                       if (m.pos?.[view2d] != null) {
                         top = m.pos[view2d]
@@ -923,6 +953,10 @@ export default function App() {
                         fallbackCursor = top + cardHeight(m.id)
                         pendingSeeds.current.push({ id: m.id, view: view2d, top })
                       }
+                    } else if (scattered) {
+                      top = scatterTopFor(m.id, idx, items.length)
+                      nudgeX = scatterXFor(m.id)
+                      rot = scatterRotFor(m.id)
                     }
                     return (
                     <MemoryCard
@@ -931,10 +965,12 @@ export default function App() {
                       m={m}
                       index={idx}
                       entered={entered}
-                      manual={isManual}
+                      manual={isManual || scattered}
                       manualY={top}
+                      scatterX={nudgeX}
+                      scatterRot={rot}
                       yMV={cardYMV(m.id)}
-                      instantLayout={dragActive.current || zoomSnap.current}
+                      instantLayout={dragActive.current}
                       getDragBounds={getDragBounds}
                       onDragStart={onCardDragStart}
                       onDragEnd={commitDrag}
