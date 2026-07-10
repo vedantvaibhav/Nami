@@ -484,8 +484,13 @@ body {
 /* both faces stacked absolutely inside the shell, cross-faded */
 .dock-face { position: absolute; }
 .zoombar {
-  /* toolbar face: vertically centred, horizontally centred */
-  left: 50%; top: 50%; transform: translate(-50%, -50%);
+  /* toolbar face: pinned to the BOTTOM of the shell (like the composer face),
+     horizontally centred. The shell resizes with its bottom fixed (it grows/
+     shrinks from the top), so a bottom-anchored toolbar sits at its final resting
+     spot the whole time — it never drifts as the height animates. (Centring it
+     made it slide down a few px as the box finished shrinking = the close-end
+     glitch.) */
+  left: 50%; bottom: 0; transform: translateX(-50%);
   height: 48px; display: flex; align-items: center; gap: 4px; padding: 0 8px;
   white-space: nowrap;
 }
