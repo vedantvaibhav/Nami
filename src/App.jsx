@@ -6,7 +6,6 @@ import MemoryCard from './MemoryCard.jsx'
 import YearOrbit from './YearOrbit.jsx'
 import Lightbox from './Lightbox.jsx'
 import Composer from './Composer.jsx'
-import SettingsPanel from './SettingsPanel.jsx'
 import { supabase, userProfile } from './supabase.js'
 import { loadMemories, saveMemories, saveImageMedia, cachePreview, deleteImage, randomColorKey } from './store.js'
 import { kindFromMime, MAX_SAFE_BYTES, seedFrac } from './media.js'
@@ -89,18 +88,71 @@ const DEMO_MEMORIES = [
 
 // Solid top nav (no gradient/blur) with a bottom border matching the month
 // gridlines, over the live demo timeline when signed out.
+// Where "Report a bug" / "Request a feature" send you (a pre-addressed email).
+const SUPPORT_EMAIL = 'vedant.vai@gmail.com'
+const mailto = (subject) => `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(subject)}`
+
 // Persistent top nav across the whole product. Right slot: a profile avatar
-// (opens settings) when signed in, else the "Login" CTA.
-function TopNav({ session, profile, onSignIn, onOpenSettings }) {
+// (opens the account menu) when signed in, else the "Login" CTA.
+function TopNav({ session, profile, onSignIn, onSignOut }) {
+  const [menuOpen, setMenuOpen] = useState(false)
+  const accountRef = useRef(null)
+  // close the menu on an outside click or Escape
+  useEffect(() => {
+    if (!menuOpen) return
+    const onDown = (e) => { if (!accountRef.current?.contains(e.target)) setMenuOpen(false) }
+    const onKey = (e) => { if (e.key === 'Escape') setMenuOpen(false) }
+    window.addEventListener('pointerdown', onDown)
+    window.addEventListener('keydown', onKey)
+    return () => { window.removeEventListener('pointerdown', onDown); window.removeEventListener('keydown', onKey) }
+  }, [menuOpen])
+
   return (
     <div className="top-nav">
       <span className="nav-brand">Nami</span>
       {session ? (
-        <button className="nav-avatar" onClick={onOpenSettings} title="Account">
-          {profile.avatarUrl
-            ? <img src={profile.avatarUrl} alt="" referrerPolicy="no-referrer" draggable={false} />
-            : <span>{profile.initial}</span>}
-        </button>
+        <div className="nav-account" ref={accountRef}>
+          <button
+            className="nav-avatar"
+            onClick={() => setMenuOpen((o) => !o)}
+            title="Account"
+            aria-haspopup="menu"
+            aria-expanded={menuOpen}
+          >
+            {profile.avatarUrl
+              ? <img src={profile.avatarUrl} alt="" referrerPolicy="no-referrer" draggable={false} />
+              : <span>{profile.initial}</span>}
+          </button>
+          <AnimatePresence>
+            {menuOpen && (
+              <motion.div
+                className="nav-menu"
+                role="menu"
+                initial={{ opacity: 0, y: -6, scale: 0.98 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: -6, scale: 0.98 }}
+                transition={{ duration: 0.16, ease: SWIFT }}
+              >
+                {(profile.name || profile.email) && (
+                  <div className="nav-menu-head">
+                    {profile.name && <span className="nav-menu-name">{profile.name}</span>}
+                    {profile.email && <span className="nav-menu-email">{profile.email}</span>}
+                  </div>
+                )}
+                <a className="nav-menu-item" role="menuitem" href={mailto('Nami — Bug report')} onClick={() => setMenuOpen(false)}>
+                  Report a bug
+                </a>
+                <a className="nav-menu-item" role="menuitem" href={mailto('Nami — Feature request')} onClick={() => setMenuOpen(false)}>
+                  Request a feature
+                </a>
+                <div className="nav-menu-sep" />
+                <button className="nav-menu-item" role="menuitem" onClick={() => { setMenuOpen(false); onSignOut() }}>
+                  Log out
+                </button>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
       ) : (
         <button className="nav-login" onClick={onSignIn}>
           <svg className="nav-login-logo" width="16" height="16" viewBox="0 0 18 18" aria-hidden="true">
@@ -148,7 +200,6 @@ export default function App() {
   // undefined = still resolving the initial session; null = signed out; object
   // = signed in. The render gate below uses these three states.
   const [session, setSession] = useState(undefined)
-  const [settingsOpen, setSettingsOpen] = useState(false)
   const signingOut = useRef(false)
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setSession(data.session))
@@ -161,7 +212,6 @@ export default function App() {
   // page swap (real memories → demo) morphed the orbit in place — cards stretched
   // and content stayed stale until scroll. A reload sidesteps that entirely.
   const handleSignOut = async () => {
-    setSettingsOpen(false)
     signingOut.current = true // the SIGNED_OUT event fires before the reload — don't swap to demo in place
     await supabase.auth.signOut()
     window.location.reload()
@@ -1118,14 +1168,8 @@ export default function App() {
         session={session}
         profile={profile}
         onSignIn={signInWithGoogle}
-        onOpenSettings={() => setSettingsOpen(true)}
+        onSignOut={handleSignOut}
       />
-
-      <AnimatePresence>
-        {settingsOpen && session && (
-          <SettingsPanel user={session.user} onClose={() => setSettingsOpen(false)} onSignOut={handleSignOut} />
-        )}
-      </AnimatePresence>
 
       <AnimatePresence>
         {openCard && <Lightbox key={openCard.id} m={openCard} onClose={() => setOpenId(null)} />}

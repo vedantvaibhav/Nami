@@ -80,6 +80,30 @@ body {
 .nav-avatar:hover { transform: scale(1.04); }
 .nav-avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .nav-avatar span { font-size: 13px; font-weight: 600; color: #4A5160; }
+
+/* account dropdown (signed in) — anchored under the avatar */
+.nav-account { position: relative; }
+.nav-menu {
+  position: absolute; top: calc(100% + 10px); right: 0; transform-origin: top right;
+  min-width: 220px; padding: 6px; z-index: 10000;
+  background: #FFFFFF; border: 1px solid #ECECE9; border-radius: 14px;
+  box-shadow: 0 12px 32px rgba(20, 20, 40, 0.12);
+  font-family: 'Inter', sans-serif;
+}
+.nav-menu-head {
+  display: flex; flex-direction: column; gap: 1px;
+  padding: 8px 10px 10px; margin-bottom: 4px; border-bottom: 1px solid #F1F1EF;
+}
+.nav-menu-name { font-size: 13px; font-weight: 600; color: #16181D; }
+.nav-menu-email { font-size: 12px; color: #8A8F98; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nav-menu-item {
+  display: block; width: 100%; text-align: left; box-sizing: border-box;
+  padding: 8px 10px; border: none; background: none; border-radius: 9px; cursor: pointer;
+  font-family: inherit; font-size: 13px; font-weight: 500; color: #3A3F4A; text-decoration: none;
+  transition: background 0.12s, color 0.12s;
+}
+.nav-menu-item:hover { background: #F5F5F3; color: #16181D; }
+.nav-menu-sep { height: 1px; margin: 4px 6px; background: #F1F1EF; }
 /* the inactive layer stays painted (opacity 0) for a smooth crossfade, but must
    not capture pointer/scroll. !important is required: R3F sets an inline
    pointer-events:auto on its <canvas> that would otherwise win over the wrapper. */
