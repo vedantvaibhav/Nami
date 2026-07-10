@@ -222,7 +222,14 @@ export default function App() {
   const [openId, setOpenId] = useState(null) // lightbox
   const [composerOpen, setComposerOpen] = useState(false)
   const [composerKey, setComposerKey] = useState(0) // remount composer fresh on each open
-  const [composerError, setComposerError] = useState(null) // e.g. day-full rejection, shown in the composer
+  const [toast, setToast] = useState(null) // transient top toast (e.g. day-full); auto-dismisses
+  const toastTimer = useRef(null)
+  useEffect(() => () => clearTimeout(toastTimer.current), [])
+  const showToast = (msg) => {
+    setToast(msg)
+    clearTimeout(toastTimer.current)
+    toastTimer.current = setTimeout(() => setToast(null), 3500)
+  }
   const [editId, setEditId] = useState(null) // memory being edited (null = adding)
   const [entered, setEntered] = useState(false) // true after the load entrance — gates the card fade-in so toggles don't re-flicker
   const toolbarRef = useRef(null)
@@ -824,13 +831,13 @@ export default function App() {
       // editing in place — never counts against the per-day limit, always allowed
       setMemories((ms) => ms.map((m) => (m.id === editId ? { ...m, type, title, body, date, media: media || [], color } : m)))
     } else {
-      // new memory — cap each day at 4. If full, reject WITHOUT closing so the
-      // user can pick another date (the composer keeps its form + open state).
+      // new memory — cap each day at 4. If full, reject WITHOUT closing (the
+      // composer keeps its form + open state) and flag it with a top toast.
       if (memories.filter((m) => m.date === date).length >= 4) {
-        setComposerError('This day is full — pick a different date.')
+        showToast('This day is full. Pick a different date.')
         return
       }
-      setComposerError(null)
+      setToast(null)
       setMemories((ms) => [...ms, {
         id: crypto.randomUUID(),
         type, title, body, date,
@@ -860,7 +867,6 @@ export default function App() {
   const openComposer = () => {
     setEditId(null) // fresh add, not an edit
     setOpenId(null)
-    setComposerError(null) // fresh open — drop any stale day-full error
     setComposerKey((k) => k + 1) // fresh form each open
     beginShellMorph()
     setComposerOpen(true)
@@ -870,7 +876,6 @@ export default function App() {
   const editMemory = useCallback((id) => {
     setEditId(id)
     setOpenId(null)
-    setComposerError(null) // fresh open — drop any stale day-full error
     setComposerKey((k) => k + 1) // remount so the form picks up the editing values
     beginShellMorph()
     setComposerOpen(true)
@@ -1229,8 +1234,6 @@ export default function App() {
               editing={editId ? memories.find((m) => m.id === editId) : null}
               onClose={closeComposer}
               onAdd={addFromComposer}
-              dayFullError={composerError}
-              onDateChange={() => setComposerError(null)}
             />
           </motion.div>
         </motion.div>
@@ -1242,6 +1245,21 @@ export default function App() {
         onSignIn={signInWithGoogle}
         onSignOut={handleSignOut}
       />
+
+      {/* transient toast, centred above the timeline (below the nav) */}
+      <AnimatePresence>
+        {toast && (
+          <motion.div
+            className="toast"
+            initial={{ opacity: 0, y: -12, x: '-50%' }}
+            animate={{ opacity: 1, y: 0, x: '-50%' }}
+            exit={{ opacity: 0, y: -12, x: '-50%' }}
+            transition={{ type: 'spring', stiffness: 420, damping: 34 }}
+          >
+            {toast}
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <AnimatePresence>
         {openCard && <Lightbox key={openCard.id} m={openCard} onClose={() => setOpenId(null)} />}
