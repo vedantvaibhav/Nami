@@ -151,13 +151,20 @@ export async function thumbURL(id) {
 export function revokeURL() {}
 export function revokeOriginal() {}
 
+// A pastel spectrum — soft tints each with a matching accent (text/icons).
+// Ordered blue -> violet -> pink -> warm -> green -> teal so the swatch row
+// reads as a gradient and fills the whole width.
 export const COLORS = {
-  blue:   { bg: '#DBE9FC', text: '#2563EB' },
-  yellow: { bg: '#FCF3C4', text: '#B45309' },
-  pink:   { bg: '#FCDEE7', text: '#DB2777' },
-  purple: { bg: '#ECDFFB', text: '#7C3AED' },
-  mint:   { bg: '#D9F2E2', text: '#0F8A4F' },
-  peach:  { bg: '#FDE7D3', text: '#C2570B' },
+  blue:     { bg: '#DBE9FC', text: '#2563EB' },
+  lavender: { bg: '#E3E1FB', text: '#5A52D6' },
+  purple:   { bg: '#ECDFFB', text: '#7C3AED' },
+  pink:     { bg: '#FCDEE7', text: '#DB2777' },
+  coral:    { bg: '#FCDCD5', text: '#DC5A45' },
+  peach:    { bg: '#FDE7D3', text: '#C2570B' },
+  yellow:   { bg: '#FCF3C4', text: '#B45309' },
+  lime:     { bg: '#E9F1CA', text: '#5F8A1B' },
+  mint:     { bg: '#D9F2E2', text: '#0F8A4F' },
+  teal:     { bg: '#CEEFEA', text: '#0E7C6E' },
 }
 
 export const COLOR_KEYS = Object.keys(COLORS)

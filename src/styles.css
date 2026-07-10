@@ -320,9 +320,13 @@ body {
 .cmp-date-value { font-size: 16px; font-weight: 500; color: #16181D; letter-spacing: -0.005em; }
 .cmp-date-icon { color: #6B7280; }
 
-.cmp-colors { display: flex; gap: 10px; }
+/* swatches flex to fill the whole row as equal circles (aspect-ratio keeps them
+   round; max-width stops them going oversized), so the palette covers the row
+   whatever the composer's width */
+.cmp-colors { display: flex; align-items: center; gap: 6px; }
 .cmp-swatch {
-  width: 28px; height: 28px; border-radius: 50%; cursor: pointer; padding: 0;
+  flex: 1 1 0; min-width: 0; aspect-ratio: 1; max-width: 28px;
+  border-radius: 50%; cursor: pointer; padding: 0;
   border: 1px solid rgba(20,20,40,0.08);
   transition: transform 0.12s, box-shadow 0.12s;
 }
