@@ -514,21 +514,32 @@ export default function App() {
   }
 
   // ---- months-view scatter (delight) -----------------------------------
-  // A month column holds only a few cards. Instead of a flat top stack, drop
-  // each into its own vertical BAND at a stable pseudo-random offset, with a
-  // small horizontal nudge and subtle tilt, so the wall reads hand-arranged.
-  // DETERMINISTIC (seeded by id → never jitters between renders) and CLAMPED by
-  // maxTopFor so a card's bottom can never dip under the dock — there is no
-  // vertical scroll. Banding by index keeps the few cards from piling up.
-  const MONTHS_SCATTER_X = 16 // max horizontal nudge (px) inside the column
-  const scatterTopFor = (id, idx, count) => {
+  // Lay a month's cards out top-to-bottom at varied heights so the wall reads
+  // hand-arranged rather than a flat stack — but with a HARD no-overlap
+  // guarantee. Each card is placed strictly below the previous card's bottom
+  // (plus MIN_GAP), and the leftover vertical space is handed out as seeded
+  // random gaps above/between/below the cards. Because every card sits below
+  // the one before it, cards (and their images) can never overlap; because the
+  // gaps sum to exactly the free space, the whole column always fits above the
+  // dock (there is no vertical scroll). Seeded by id → stable, never jitters.
+  // No tilt, no horizontal nudge: cards stay square and inside their column.
+  const scatterTops = (items) => {
+    const n = items.length
     const colAvail = Math.max(120, window.innerHeight - COL_TOP - DOCK_CLEARANCE)
-    const band = colAvail / Math.max(1, count)
-    const within = seedFrac(id + ':my') * band * 0.66
-    return Math.min(Math.round(idx * band + within), maxTopFor(id))
+    const heights = items.map((m) => cardHeight(m.id))
+    const used = heights.reduce((a, b) => a + b, 0) + MIN_GAP * (n + 1)
+    const slack = Math.max(0, colAvail - used) // 0 => too tall to scatter; pack tight
+    const w = items.map((m) => seedFrac(m.id + ':g')) // gap ABOVE each card...
+    w.push(seedFrac(items[n - 1].id + ':gEnd'))       // ...plus a trailing gap
+    const wsum = w.reduce((a, b) => a + b, 0) || 1
+    const tops = {}
+    let cursor = MIN_GAP + (w[0] / wsum) * slack
+    for (let i = 0; i < n; i++) {
+      tops[items[i].id] = Math.round(cursor)
+      cursor += heights[i] + MIN_GAP + (w[i + 1] / wsum) * slack
+    }
+    return tops
   }
-  const scatterXFor = (id) => Math.round((seedFrac(id + ':mx') * 2 - 1) * MONTHS_SCATTER_X)
-  const scatterRotFor = (id) => +((seedFrac(id + ':mr') * 2 - 1) * 1.4).toFixed(2)
 
   // the dragged card's column-mates, derived at event time from fresh data
   const colItemsFor = (id) => {
@@ -906,14 +917,14 @@ export default function App() {
               // (absolute Y per card) for THIS view; the first drag flips it.
               const isManual = isManualCol(items)
               // A non-manual MONTHS column gets the seeded scatter: cards are
-              // absolutely placed at a banded pseudo-random top (clamped
-              // on-screen) with a small x nudge + tilt. It renders exactly like a
-              // manual column, so the drag/drop system and the Days↔Months flight
-              // need no special-casing — only the initial top differs (seed, not
-              // saved pos). The first drag flips it to a real manual column
-              // (onCardDragStart seeds every card from its live offsetTop, so the
-              // scattered layout is preserved with no jump).
+              // absolutely placed at non-overlapping, hand-arranged tops. It
+              // renders exactly like a manual column, so the drag/drop system and
+              // the Days↔Months flight need no special-casing — only the initial
+              // top differs (seed, not saved pos). The first drag flips it to a
+              // real manual column (onCardDragStart seeds every card from its
+              // live offsetTop, so the scattered layout is preserved with no jump).
               const scattered = !isManual && view2d === 'months'
+              const scatterTop = scattered && items.length ? scatterTops(items) : null
               // cards WITHOUT a saved pos in a manual column (e.g. a memory just
               // added to a hand-arranged day) stack sequentially below the lowest
               // placed card — never at 0, never overlapping. The computed top is
@@ -943,8 +954,6 @@ export default function App() {
                     // the drag (getDragBounds) + the drop (commitDrag's inline
                     // clamp): you can never *place* a card off-screen.
                     let top = 0
-                    let nudgeX = 0
-                    let rot = 0
                     if (isManual) {
                       if (m.pos?.[view2d] != null) {
                         top = m.pos[view2d]
@@ -954,9 +963,7 @@ export default function App() {
                         pendingSeeds.current.push({ id: m.id, view: view2d, top })
                       }
                     } else if (scattered) {
-                      top = scatterTopFor(m.id, idx, items.length)
-                      nudgeX = scatterXFor(m.id)
-                      rot = scatterRotFor(m.id)
+                      top = scatterTop[m.id]
                     }
                     return (
                     <MemoryCard
@@ -967,8 +974,6 @@ export default function App() {
                       entered={entered}
                       manual={isManual || scattered}
                       manualY={top}
-                      scatterX={nudgeX}
-                      scatterRot={rot}
                       yMV={cardYMV(m.id)}
                       instantLayout={dragActive.current}
                       getDragBounds={getDragBounds}
