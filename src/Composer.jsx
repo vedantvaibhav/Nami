@@ -222,6 +222,20 @@ export default function Composer({ active, defaultDate, editing, onClose, onAdd 
       </div>
       {warn && <div className="cmp-warn">Some files couldn’t be added — try a smaller file.</div>}
 
+      {/* card colour — sits on its own line above the date button */}
+      <div className="cmp-colors">
+        {COLOR_KEYS.map((k) => (
+          <button
+            key={k}
+            type="button"
+            className={`cmp-swatch ${color === k ? 'cmp-swatch-sel' : ''}`}
+            style={{ background: COLORS[k].bg, color: COLORS[k].text }}
+            onClick={() => setColor(k)}
+            title={k}
+          />
+        ))}
+      </div>
+
       {/* date with custom calendar */}
       <button ref={dateBtnRef} type="button" className="cmp-date" onClick={toggleCal}>
         <span className="cmp-date-value">{prettyDate(date)}</span>
@@ -238,20 +252,6 @@ export default function Composer({ active, defaultDate, editing, onClose, onAdd 
           />
         )}
       </AnimatePresence>
-
-      {/* card colour */}
-      <div className="cmp-colors">
-        {COLOR_KEYS.map((k) => (
-          <button
-            key={k}
-            type="button"
-            className={`cmp-swatch ${color === k ? 'cmp-swatch-sel' : ''}`}
-            style={{ background: COLORS[k].bg, color: COLORS[k].text }}
-            onClick={() => setColor(k)}
-            title={k}
-          />
-        ))}
-      </div>
 
       <button className="cmp-add" disabled={!canAdd} onClick={submit}>{editing ? 'Save' : 'Add to Timeline'}</button>
     </div>
