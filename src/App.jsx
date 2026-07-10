@@ -596,20 +596,24 @@ export default function App() {
   // gaps sum to exactly the free space, the whole column always fits above the
   // dock (there is no vertical scroll). Seeded by id → stable, never jitters.
   // No tilt, no horizontal nudge: cards stay square and inside their column.
+  const SCATTER_MAX_GAP = 96 // most extra breathing room a card adds above itself
   const scatterTops = (items) => {
     const n = items.length
     const colAvail = Math.max(120, window.innerHeight - COL_TOP - DOCK_CLEARANCE)
     const heights = items.map((m) => cardHeight(m.id))
-    const used = heights.reduce((a, b) => a + b, 0) + MIN_GAP * (n + 1)
-    const slack = Math.max(0, colAvail - used) // 0 => too tall to scatter; pack tight
-    const w = items.map((m) => seedFrac(m.id + ':g')) // gap ABOVE each card...
-    w.push(seedFrac(items[n - 1].id + ':gEnd'))       // ...plus a trailing gap
-    const wsum = w.reduce((a, b) => a + b, 0) || 1
+    // Each card's extra gap is seeded on its OWN id and drawn from a per-slot
+    // budget, so a card's top depends only on the cards BEFORE it (their seeds +
+    // heights) — appending a card never moves the ones above it. The running
+    // cursor keeps every card strictly below the previous one (no overlap), and
+    // the budget keeps the whole column within colAvail (never under the dock).
+    const fixed = heights.reduce((a, b) => a + b, 0) + MIN_GAP * (n + 1)
+    const perSlot = Math.min(SCATTER_MAX_GAP, Math.max(0, (colAvail - fixed) / (n + 1)))
     const tops = {}
-    let cursor = MIN_GAP + (w[0] / wsum) * slack
+    let cursor = MIN_GAP + seedFrac(items[0].id + ':g') * perSlot
     for (let i = 0; i < n; i++) {
       tops[items[i].id] = Math.round(cursor)
-      cursor += heights[i] + MIN_GAP + (w[i + 1] / wsum) * slack
+      const nextGap = i + 1 < n ? seedFrac(items[i + 1].id + ':g') * perSlot : 0
+      cursor += heights[i] + MIN_GAP + nextGap
     }
     return tops
   }
@@ -790,28 +794,24 @@ export default function App() {
   const addFromComposer = ({ title, body, date, media, color }) => {
     const hasMedia = media && media.length
     const type = !hasMedia && title && !body ? 'quote' : 'note'
-    const eid = editId
-    // Start the dock's close morph FIRST, then insert the memory on the NEXT
-    // frame. A new card can be expensive to render (image decode), and doing it
-    // in the same commit as the close made the shrink hitch mid-flight. A single
-    // frame's delay before the card appears is imperceptible; the close stays
-    // smooth. (The measure effect no longer keys on `memories`, so this insert
-    // also can't trigger a re-measure mid-close.)
+    // Insert in the SAME commit as the close. shellMorph (state, timer-cleared)
+    // and the size-measure bail-out already protect the shrink from mid-morph
+    // re-measures, and the card's image loads async (useThumb) so no decode
+    // happens in this commit — deferring the insert a frame bought nothing and
+    // only made the new card mount late, out of sync with the close.
+    if (editId) {
+      setMemories((ms) => ms.map((m) => (m.id === editId ? { ...m, type, title, body, date, media: media || [], color } : m)))
+    } else {
+      setMemories((ms) => [...ms, {
+        id: crypto.randomUUID(),
+        type, title, body, date,
+        media: media || [],
+        color: color || randomColorKey(), // picked in the composer; fall back to random
+      }])
+    }
     beginShellMorph()
     setComposerOpen(false)
     setEditId(null)
-    requestAnimationFrame(() => {
-      if (eid) {
-        setMemories((ms) => ms.map((m) => (m.id === eid ? { ...m, type, title, body, date, media: media || [], color } : m)))
-      } else {
-        setMemories((ms) => [...ms, {
-          id: crypto.randomUUID(),
-          type, title, body, date,
-          media: media || [],
-          color: color || randomColorKey(), // picked in the composer; fall back to random
-        }])
-      }
-    })
   }
 
   // shellMorph is STATE (not a ref) and is cleared on a timer sized to the

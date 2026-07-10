@@ -79,11 +79,22 @@ function getVideoTexture(url, onReady) {
   return texture
 }
 
-function MediaPlane({ position, scale, item, chunkCx, chunkCy, chunkCz, cameraGridRef, onOpen, introDelay = 0 }) {
+function MediaPlane({ position, scale, media, mediaIndex, chunkCx, chunkCy, chunkCz, cameraGridRef, onOpen, introDelay = 0 }) {
   const meshRef = useRef(null)
   const materialRef = useRef(null)
   const localState = useRef({ opacity: 0, frame: 0, introScaled: false, introDone: false, scaleInit: false, needsSnap: false })
   const [texture, setTexture] = useState(null)
+
+  // Freeze the modulus to the media length this plane was BORN with. The tile
+  // picks its content by `mediaIndex % length`; if we used the LIVE length, an
+  // append (N -> N+1) would shift the remainder of EVERY mounted plane at once,
+  // so every visible tile would swap texture + aspect ("everything stretches on
+  // upload"). Locking the length means a live plane keeps its exact item across
+  // an add — only chunks generated afterwards (fresh tiles you scroll into) use
+  // the new length and can surface the new memory. The `??` guards a shrink
+  // (delete) where the frozen index would fall past the end.
+  const bornLen = useRef(media.length)
+  const item = media[mediaIndex % bornLen.current] ?? media[mediaIndex % media.length]
 
   useFrame(() => {
     const material = materialRef.current
@@ -222,24 +233,23 @@ function Chunk({ cx, cy, cz, media, cameraGridRef, onOpen }) {
 
   return (
     <group>
-      {planes.map((plane) => {
-        const item = media[plane.mediaIndex % media.length]
-        if (!item) return null
-        return (
-          <MediaPlane
-            key={plane.id}
-            position={plane.position}
-            scale={plane.scale}
-            item={item}
-            chunkCx={cx}
-            chunkCy={cy}
-            chunkCz={cz}
-            cameraGridRef={cameraGridRef}
-            onOpen={onOpen}
-            introDelay={introDelayFor(plane.id)}
-          />
-        )
-      })}
+      {planes.map((plane) => (
+        // item is resolved inside MediaPlane against the length it was born with,
+        // so an append never remaps an already-mounted tile (see MediaPlane).
+        <MediaPlane
+          key={plane.id}
+          position={plane.position}
+          scale={plane.scale}
+          media={media}
+          mediaIndex={plane.mediaIndex}
+          chunkCx={cx}
+          chunkCy={cy}
+          chunkCz={cz}
+          cameraGridRef={cameraGridRef}
+          onOpen={onOpen}
+          introDelay={introDelayFor(plane.id)}
+        />
+      ))}
     </group>
   )
 }

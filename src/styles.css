@@ -198,11 +198,12 @@ body {
 .card-photo {
   display: block; width: 100%; aspect-ratio: 4 / 3;
   object-fit: cover; border-radius: 14px; margin-top: 12px; pointer-events: none;
+  background: #E9EBEF; /* neutral placeholder while the thumbnail decodes */
 }
 /* multi-photo: a deck pinned in one spot, filling the card — only rotation
    differs so the prints underneath peek out at the corners. The extra top
    margin clears the rotated corners so they don't poke into the text above. */
-.photo-stack { position: relative; margin-top: 24px; margin-bottom: 14px; aspect-ratio: 4 / 3; }
+.photo-stack { position: relative; margin-top: 24px; margin-bottom: 14px; aspect-ratio: 4 / 3; border-radius: 12px; background: #E9EBEF; }
 .stack-img {
   position: absolute; inset: 0; width: 100%; height: 100%;
   object-fit: cover;
