@@ -2,13 +2,14 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { flushSync } from 'react-dom'
 import { AnimatePresence, LayoutGroup, animate, motion, motionValue, useMotionValue } from 'framer-motion'
 import { SWIFT, LIQUID } from './anim.js'
-import MemoryCard from './MemoryCard.jsx'
+import MemoryCard, { Icon } from './MemoryCard.jsx'
 import YearOrbit from './YearOrbit.jsx'
 import Lightbox from './Lightbox.jsx'
 import Composer from './Composer.jsx'
+import BulkUploader from './BulkUploader.jsx'
 import { supabase, userProfile } from './supabase.js'
 import { loadMemories, saveMemories, saveImageMedia, cachePreview, deleteImage, randomColorKey } from './store.js'
-import { kindFromMime, MAX_SAFE_BYTES, seedFrac } from './media.js'
+import { kindFromMime, MAX_SAFE_BYTES, seedFrac, icons } from './media.js'
 import { ZOOMS, markerLabel, toISO, fromISO, unitStart, currentMonthDays, currentYearMonths } from './time.js'
 
 const MARKER_H = 130 // px reserved at top for date markers
@@ -222,6 +223,8 @@ export default function App() {
   const [openId, setOpenId] = useState(null) // lightbox
   const [composerOpen, setComposerOpen] = useState(false)
   const [composerKey, setComposerKey] = useState(0) // remount composer fresh on each open
+  const [bulkFiles, setBulkFiles] = useState(null) // File[] while the bulk-placement modal is open
+  const bulkInputRef = useRef(null) // hidden multi-file picker behind the dock "bulk" button
   const [toast, setToast] = useState(null) // transient top toast (e.g. day-full); auto-dismisses
   const toastTimer = useRef(null)
   useEffect(() => () => clearTimeout(toastTimer.current), [])
@@ -955,9 +958,31 @@ export default function App() {
     if (zoom.id === 'years') return // orbit view: no drop target
     const files = [...(e.dataTransfer?.files || [])]
     if (!files.length) return
+    // multiple images at once -> full-screen placement flow (assign a date each);
+    // a single file (or a non-image drop) keeps the existing quick-add behaviour
+    const imgs = files.filter((f) => kindFromMime(f.type) === 'image')
+    if (imgs.length > 1) { setBulkFiles(imgs); return }
     const card = blankCard(anchorDate())
     setMemories((ms) => [...ms, card])
     attachFiles(card.id, files)
+  }
+
+  // Commit the bulk-placement modal: one card per photo on its chosen date,
+  // respecting the per-day cap (skip photos whose day is already full — counting
+  // both existing memories AND ones added earlier in this same batch).
+  const handleBulkCommit = (assignments) => {
+    const counts = {}
+    let skipped = 0
+    for (const { file, date } of assignments) {
+      if (counts[date] == null) counts[date] = (memories?.filter((m) => m.date === date).length) || 0
+      if (counts[date] >= DAY_MAX) { skipped++; continue }
+      counts[date]++
+      const card = blankCard(date)
+      setMemories((ms) => [...ms, card])
+      attachFiles(card.id, [file])
+    }
+    setBulkFiles(null)
+    if (skipped) showToast("Some photos weren't added. Those days were full.")
   }
 
   useEffect(() => {
@@ -1211,7 +1236,28 @@ export default function App() {
             >+</button>
 
             {session && <span className="zoombar-divider" />}
+            {session && (
+              <button
+                className="bulk-cta"
+                onClick={() => bulkInputRef.current?.click()}
+                title="Bulk upload photos"
+              >
+                <Icon d={icons.upload} size={18} />
+              </button>
+            )}
             {session && <button className="add-cta" onClick={openComposer}>Add</button>}
+            <input
+              ref={bulkInputRef}
+              type="file"
+              accept="image/*"
+              multiple
+              hidden
+              onChange={(e) => {
+                const picked = [...e.target.files]
+                e.target.value = '' // allow re-picking the same files
+                if (picked.length) setBulkFiles(picked)
+              }}
+            />
           </motion.div>
 
           {/* composer face */}
@@ -1249,6 +1295,33 @@ export default function App() {
 
       <AnimatePresence>
         {openCard && <Lightbox key={openCard.id} m={openCard} onClose={() => setOpenId(null)} />}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {bulkFiles && (
+          <BulkUploader
+            files={bulkFiles}
+            onClose={() => setBulkFiles(null)}
+            onCommit={handleBulkCommit}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* top toast for messages shown while the composer is closed (e.g. the
+          bulk "some days were full" notice); the composer shows its own toast
+          above the CTA when open */}
+      <AnimatePresence>
+        {toast && !composerOpen && (
+          <motion.div
+            className="toast"
+            initial={{ opacity: 0, y: -12, x: '-50%' }}
+            animate={{ opacity: 1, y: 0, x: '-50%' }}
+            exit={{ opacity: 0, y: -12, x: '-50%' }}
+            transition={{ type: 'spring', stiffness: 420, damping: 34 }}
+          >
+            {toast}
+          </motion.div>
+        )}
       </AnimatePresence>
     </div>
   )
