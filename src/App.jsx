@@ -13,10 +13,16 @@ import { ZOOMS, markerLabel, toISO, fromISO, unitStart, currentMonthDays, curren
 
 const MARKER_H = 130 // px reserved at top for date markers
 // LIQUID (the shared switch spring — pill morph + card glide) lives in anim.js
-// The dock morph — open and close use the SAME spring, so opening feels just
-// like closing in reverse (the close feel the user likes).
-const SHELL_CLOSE = { type: 'spring', stiffness: 320, damping: 36, mass: 1 }
-const SHELL_OPEN = SHELL_CLOSE
+// The dock morph. OPEN is a spring (the reverse-of-close feel). CLOSE is a
+// fixed-duration TWEEN, not a spring: adding an image grows the composer via its
+// own spring, so clicking Add interrupts that in-flight motion — a spring close
+// carries the leftover UPWARD velocity and drifts/stalls before reversing (the
+// "stuck in between, then goes" hitch), and its overdamped tail hangs near the
+// end over the taller distance. A tween interpolates from the current height
+// with no velocity carryover and no tail, so the shrink is smooth every time.
+// SWIFT (easeOutExpo-ish) keeps the snappy-then-soft character.
+const SHELL_OPEN = { type: 'spring', stiffness: 320, damping: 36, mass: 1 }
+const SHELL_CLOSE = { duration: 0.34, ease: SWIFT }
 // how long shellMorph stays true — must outlast the open tween / close settle
 const SHELL_MORPH_MS = 700
 
