@@ -310,19 +310,30 @@ body {
 }
 .cmp-warn { font-size: 12px; color: #C2570B; margin-top: -4px; }
 
+/* date + colours share one row, each taking exactly half. Grid with
+   minmax(0,1fr) columns guarantees a true 50/50 split regardless of the date
+   text length or the swatch count (plain flex let content skew the widths). */
+.cmp-meta { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; align-items: stretch; }
+
 /* date: value + calendar icon; native input overlaid so a click opens the OS picker */
 .cmp-date {
-  position: relative; display: flex; align-items: center; justify-content: space-between;
-  border: 1px solid #E3E5EA; border-radius: 12px; padding: 14px 16px; cursor: pointer;
+  position: relative; display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  border: 1px solid #E3E5EA; border-radius: 12px; padding: 14px 14px; cursor: pointer;
   background: #fff; text-align: left; transition: border-color 0.15s, background 0.15s;
 }
 .cmp-date:hover { border-color: #B8BCC4; background: #FAFAFA; }
-.cmp-date-value { font-size: 16px; font-weight: 500; color: #16181D; letter-spacing: -0.005em; }
-.cmp-date-icon { color: #6B7280; }
+.cmp-date-value {
+  font-size: 15px; font-weight: 500; color: #16181D; letter-spacing: -0.005em;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; /* a long month can't wrap the button taller */
+}
+.cmp-date-icon { color: #6B7280; flex-shrink: 0; }
 
-.cmp-colors { display: flex; gap: 10px; }
+/* swatches spread across their half; sized so all six fit beside the date.
+   No fixed gap — space-between owns the spacing, so a min gap can't force the
+   row wider than its half and skew the split. */
+.cmp-colors { display: flex; align-items: center; justify-content: space-between; }
 .cmp-swatch {
-  width: 28px; height: 28px; border-radius: 50%; cursor: pointer; padding: 0;
+  width: 20px; height: 20px; border-radius: 50%; cursor: pointer; padding: 0; flex-shrink: 0;
   border: 1px solid rgba(20,20,40,0.08);
   transition: transform 0.12s, box-shadow 0.12s;
 }

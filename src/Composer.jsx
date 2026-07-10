@@ -222,25 +222,25 @@ export default function Composer({ active, defaultDate, editing, onClose, onAdd 
       </div>
       {warn && <div className="cmp-warn">Some files couldn’t be added — try a smaller file.</div>}
 
-      {/* card colour — sits on its own line above the date button */}
-      <div className="cmp-colors">
-        {COLOR_KEYS.map((k) => (
-          <button
-            key={k}
-            type="button"
-            className={`cmp-swatch ${color === k ? 'cmp-swatch-sel' : ''}`}
-            style={{ background: COLORS[k].bg, color: COLORS[k].text }}
-            onClick={() => setColor(k)}
-            title={k}
-          />
-        ))}
+      {/* one row: the date takes the left half, the colour swatches the right */}
+      <div className="cmp-meta">
+        <button ref={dateBtnRef} type="button" className="cmp-date" onClick={toggleCal}>
+          <span className="cmp-date-value">{prettyDate(date)}</span>
+          <Icon d={icons.calendar} size={18} className="cmp-date-icon" />
+        </button>
+        <div className="cmp-colors">
+          {COLOR_KEYS.map((k) => (
+            <button
+              key={k}
+              type="button"
+              className={`cmp-swatch ${color === k ? 'cmp-swatch-sel' : ''}`}
+              style={{ background: COLORS[k].bg, color: COLORS[k].text }}
+              onClick={() => setColor(k)}
+              title={k}
+            />
+          ))}
+        </div>
       </div>
-
-      {/* date with custom calendar */}
-      <button ref={dateBtnRef} type="button" className="cmp-date" onClick={toggleCal}>
-        <span className="cmp-date-value">{prettyDate(date)}</span>
-        <Icon d={icons.calendar} size={18} className="cmp-date-icon" />
-      </button>
       <AnimatePresence>
         {calOpen && anchor && (
           <CalendarPopover
