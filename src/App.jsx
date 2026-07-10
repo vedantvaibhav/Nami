@@ -784,19 +784,28 @@ export default function App() {
   const addFromComposer = ({ title, body, date, media, color }) => {
     const hasMedia = media && media.length
     const type = !hasMedia && title && !body ? 'quote' : 'note'
-    if (editId) {
-      setMemories((ms) => ms.map((m) => (m.id === editId ? { ...m, type, title, body, date, media: media || [], color } : m)))
-    } else {
-      setMemories((ms) => [...ms, {
-        id: crypto.randomUUID(),
-        type, title, body, date,
-        media: media || [],
-        color: color || randomColorKey(), // picked in the composer; fall back to random
-      }])
-    }
+    const eid = editId
+    // Start the dock's close morph FIRST, then insert the memory on the NEXT
+    // frame. A new card can be expensive to render (image decode), and doing it
+    // in the same commit as the close made the shrink hitch mid-flight. A single
+    // frame's delay before the card appears is imperceptible; the close stays
+    // smooth. (The measure effect no longer keys on `memories`, so this insert
+    // also can't trigger a re-measure mid-close.)
     beginShellMorph()
     setComposerOpen(false)
     setEditId(null)
+    requestAnimationFrame(() => {
+      if (eid) {
+        setMemories((ms) => ms.map((m) => (m.id === eid ? { ...m, type, title, body, date, media: media || [], color } : m)))
+      } else {
+        setMemories((ms) => [...ms, {
+          id: crypto.randomUUID(),
+          type, title, body, date,
+          media: media || [],
+          color: color || randomColorKey(), // picked in the composer; fall back to random
+        }])
+      }
+    })
   }
 
   // shellMorph is STATE (not a ref) and is cleared on a timer sized to the
@@ -842,17 +851,24 @@ export default function App() {
     const measure = () => {
       const tw = toolbarRef.current?.offsetWidth
       const ch = composerRef.current?.offsetHeight
-      setDockDims((d) => ({ toolbarW: tw || d.toolbarW, composerH: ch || d.composerH }))
+      setDockDims((d) => {
+        const toolbarW = tw || d.toolbarW, composerH = ch || d.composerH
+        // bail out (same reference) when nothing changed, so a re-measure never
+        // forces a needless re-render mid-morph
+        return toolbarW === d.toolbarW && composerH === d.composerH ? d : { toolbarW, composerH }
+      })
     }
     measure()
     const ro = new ResizeObserver(measure)
     if (toolbarRef.current) ro.observe(toolbarRef.current)
     if (composerRef.current) ro.observe(composerRef.current)
     return () => ro.disconnect()
-    // `session` matters: the dock only mounts once the session resolves, and in
-    // demo mode `memories` is set while session is still loading — so without
-    // this the toolbar was never re-measured when the dock appeared and the
-    // shell kept its stale default width (extra side padding until a zoom click).
+    // `session` + `memories` matter: the dock mounts once the session resolves,
+    // and in demo mode memories are set while session is still loading — without
+    // a re-run here the toolbar keeps its stale default width (extra side padding
+    // until a zoom click). Re-measuring on every add used to hitch the close,
+    // but setDockDims now bails out when the size is unchanged (which it is on
+    // add — the composer keeps its content as it fades), so there's no re-render.
   }, [composerKey, zoomIdx, memories, session])
 
   // Persist dropped/picked/pasted files as blobs, attach refs to the card
