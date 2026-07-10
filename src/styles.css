@@ -321,11 +321,11 @@ body {
 .cmp-date-icon { color: #6B7280; }
 
 /* swatches flex to fill the whole row as equal circles (aspect-ratio keeps them
-   round; max-width stops them going oversized), so the palette covers the row
-   whatever the composer's width */
-.cmp-colors { display: flex; align-items: center; gap: 6px; }
+   round). No max-width cap — they grow to span the full width whatever the
+   composer's width, so the palette never leaves empty space on the side. */
+.cmp-colors { display: flex; align-items: center; gap: 10px; }
 .cmp-swatch {
-  flex: 1 1 0; min-width: 0; aspect-ratio: 1; max-width: 28px;
+  flex: 1 1 0; min-width: 0; aspect-ratio: 1;
   border-radius: 50%; cursor: pointer; padding: 0;
   border: 1px solid rgba(20,20,40,0.08);
   transition: transform 0.12s, box-shadow 0.12s;
