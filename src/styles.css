@@ -328,20 +328,21 @@ body {
 }
 .cmp-date-icon { color: #6B7280; flex-shrink: 0; }
 
-/* colour circles, centred in the row (smaller than the date field). No fixed
-   gap — space-between owns the spacing so it can't widen the column past its
-   share and skew the split; the six circles sit shoulder-to-shoulder. */
-.cmp-colors { display: flex; align-items: center; justify-content: space-between; }
+/* colour circles, centred in the row (smaller than the date field) and
+   OVERLAPPING — each tucks 8px under the next (a fanned pile). */
+.cmp-colors { display: flex; align-items: center; justify-content: center; }
 .cmp-swatch {
-  width: 20px; height: 20px; border-radius: 50%; cursor: pointer; padding: 0; flex-shrink: 0;
+  width: 24px; height: 24px; border-radius: 50%; cursor: pointer; padding: 0; flex-shrink: 0;
   border: 1px solid rgba(20,20,40,0.08);
+  position: relative; /* so hover/selected can lift above their neighbours */
   transition: transform 0.16s ease, box-shadow 0.14s ease;
 }
-/* hover: the circle lifts up a touch */
-.cmp-swatch:hover { transform: translateY(-4px); }
-/* selected: a colour ring around the circle — it's small enough that the ring
-   stays within the field height */
-.cmp-swatch-sel { box-shadow: 0 0 0 2px #fff, 0 0 0 4px currentColor; }
+.cmp-swatch:not(:first-child) { margin-left: -8px; }
+/* hover: the circle lifts up a touch and comes to the front */
+.cmp-swatch:hover { transform: translateY(-4px); z-index: 3; }
+/* selected: a colour ring around the circle (on top of its neighbours). Small
+   enough that the ring stays within the field height. */
+.cmp-swatch-sel { box-shadow: 0 0 0 2px #fff, 0 0 0 4px currentColor; z-index: 2; }
 
 .cmp-add {
   margin-top: 2px; height: 48px; border: none; border-radius: 14px;
