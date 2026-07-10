@@ -105,7 +105,7 @@ function Thumb({ item, onRemove }) {
   )
 }
 
-export default function Composer({ active, defaultDate, editing, onClose, onAdd }) {
+export default function Composer({ active, defaultDate, editing, onClose, onAdd, dayFullError, onDateChange }) {
   const todayISO = toISO(new Date())
   // when editing an existing memory, pre-fill from it (the composer is remounted
   // per open via `key`, so these initial values are correct each time)
@@ -233,7 +233,7 @@ export default function Composer({ active, defaultDate, editing, onClose, onAdd 
             value={date}
             max={todayISO}
             anchor={anchor}
-            onChange={setDate}
+            onChange={(d) => { setDate(d); onDateChange?.() }}
             onClose={() => setCalOpen(false)}
           />
         )}
@@ -253,6 +253,7 @@ export default function Composer({ active, defaultDate, editing, onClose, onAdd 
         ))}
       </div>
 
+      {dayFullError && <div className="cmp-warn">{dayFullError}</div>}
       <button className="cmp-add" disabled={!canAdd} onClick={submit}>{editing ? 'Save' : 'Add to Timeline'}</button>
     </div>
   )
