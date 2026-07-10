@@ -47,6 +47,7 @@ body {
   padding: 14px 28px; background: #FDFDFC;
   border-bottom: 1px solid #F1F1EF; /* same as the month gridlines */
 }
+
 .nav-brand {
   font-family: 'Neulis', 'Helvetica Neue', Helvetica, Arial, sans-serif;
   font-size: 22px; font-weight: 600; letter-spacing: 0.01em; color: #16181D;
@@ -320,20 +321,34 @@ body {
 .cmp-date-value { font-size: 16px; font-weight: 500; color: #16181D; letter-spacing: -0.005em; }
 .cmp-date-icon { color: #6B7280; }
 
-.cmp-colors { display: flex; gap: 10px; }
+/* swatches flex to fill the whole row as equal circles (aspect-ratio keeps them
+   round). No max-width cap — they grow to span the full width whatever the
+   composer's width, so the palette never leaves empty space on the side. */
+.cmp-colors { display: flex; align-items: center; gap: 10px; }
 .cmp-swatch {
-  width: 28px; height: 28px; border-radius: 50%; cursor: pointer; padding: 0;
+  flex: 1 1 0; min-width: 0; aspect-ratio: 1;
+  border-radius: 50%; cursor: pointer; padding: 0;
   border: 1px solid rgba(20,20,40,0.08);
   transition: transform 0.12s, box-shadow 0.12s;
 }
 .cmp-swatch:hover { transform: scale(1.1); }
 .cmp-swatch-sel { box-shadow: 0 0 0 2px #fff, 0 0 0 4px currentColor; }
 
+.cmp-add-wrap { position: relative; margin-top: 2px; }
 .cmp-add {
-  margin-top: 2px; height: 48px; border: none; border-radius: 14px;
+  height: 48px; width: 100%; border: none; border-radius: 14px;
   background: #16181D; color: #fff; cursor: pointer;
   font-family: inherit; font-size: 15px; font-weight: 600;
   transition: background 0.15s, opacity 0.15s;
+}
+/* transient warning toast, floated just above the Add CTA */
+.cmp-toast {
+  position: absolute; bottom: calc(100% + 8px); left: 0; right: 0;
+  padding: 9px 14px; border-radius: 12px; text-align: center;
+  background: #FDE7D3; color: #C2570B; /* soft peach warning, stands out over the dark CTA */
+  font-family: inherit; font-size: 13px; font-weight: 600; letter-spacing: -0.005em;
+  box-shadow: 0 8px 22px rgba(20,20,40,0.16), 0 1px 3px rgba(20,20,40,0.08);
+  pointer-events: none;
 }
 .cmp-add:hover:not(:disabled) { background: #2C2F38; }
 .cmp-add:disabled { opacity: 0.4; cursor: default; }

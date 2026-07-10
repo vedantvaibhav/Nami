@@ -105,7 +105,7 @@ function Thumb({ item, onRemove }) {
   )
 }
 
-export default function Composer({ active, defaultDate, editing, onClose, onAdd }) {
+export default function Composer({ active, defaultDate, editing, onClose, onAdd, notice }) {
   const todayISO = toISO(new Date())
   // when editing an existing memory, pre-fill from it (the composer is remounted
   // per open via `key`, so these initial values are correct each time)
@@ -253,7 +253,23 @@ export default function Composer({ active, defaultDate, editing, onClose, onAdd 
         ))}
       </div>
 
-      <button className="cmp-add" disabled={!canAdd} onClick={submit}>{editing ? 'Save' : 'Add to Timeline'}</button>
+      <div className="cmp-add-wrap">
+        {/* transient toast that pops up right above the CTA (e.g. day full) */}
+        <AnimatePresence>
+          {notice && (
+            <motion.div
+              className="cmp-toast"
+              initial={{ opacity: 0, y: 8, scale: 0.96 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 8, scale: 0.97 }}
+              transition={{ type: 'spring', stiffness: 460, damping: 34 }}
+            >
+              {notice}
+            </motion.div>
+          )}
+        </AnimatePresence>
+        <button className="cmp-add" disabled={!canAdd} onClick={submit}>{editing ? 'Save' : 'Add to Timeline'}</button>
+      </div>
     </div>
   )
 }

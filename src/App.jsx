@@ -54,10 +54,29 @@ const CARD_SETTLE = { type: 'tween', duration: 0.13, ease: [0.25, 1, 0.5, 1] }
 // column to at most a few cards — otherwise a busy month stacks past the bottom
 // of the viewport (below the dock). Days show everything.
 const MONTHS_VIEW_MAX = 3
+const DAY_MAX = 4 // most memories allowed on a single day
 const byDate = (a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0)
-const collateColumn = (items, view) => {
+
+// Seeded ONCE per page load (module scope = never re-rolls on an App re-render).
+// The Months view samples only MONTHS_VIEW_MAX cards from a busy month; this seed
+// makes that sample stable within a session but varied between page loads.
+const SESSION_SEED = Math.random()
+
+// Pick a session-stable, month-varied sample of a busy month's cards. Each column
+// gets its own starting offset (SESSION_SEED + a per-key fraction from seedFrac,
+// whose rolling hash spreads adjacent month keys well apart) so different months
+// surface different memories; picked items are re-sorted by date so the column
+// still reads chronologically.
+const pickForMonth = (sorted, colKey) => {
+  if (sorted.length <= MONTHS_VIEW_MAX) return sorted
+  const offset = Math.floor((SESSION_SEED + seedFrac(colKey)) * sorted.length) % sorted.length
+  const idxs = Array.from({ length: MONTHS_VIEW_MAX }, (_, i) => (offset + i) % sorted.length)
+  return idxs.map((i) => sorted[i]).sort(byDate)
+}
+
+const collateColumn = (items, view, key) => {
   const sorted = items.slice().sort(byDate)
-  return view === 'months' ? sorted.slice(0, MONTHS_VIEW_MAX) : sorted
+  return view === 'months' ? pickForMonth(sorted, key) : sorted
 }
 
 // The ordered column keys for a view. Days is sparse (only days with memories);
@@ -203,6 +222,14 @@ export default function App() {
   const [openId, setOpenId] = useState(null) // lightbox
   const [composerOpen, setComposerOpen] = useState(false)
   const [composerKey, setComposerKey] = useState(0) // remount composer fresh on each open
+  const [toast, setToast] = useState(null) // transient top toast (e.g. day-full); auto-dismisses
+  const toastTimer = useRef(null)
+  useEffect(() => () => clearTimeout(toastTimer.current), [])
+  const showToast = (msg) => {
+    setToast(msg)
+    clearTimeout(toastTimer.current)
+    toastTimer.current = setTimeout(() => setToast(null), 3500)
+  }
   const [editId, setEditId] = useState(null) // memory being edited (null = adding)
   const [entered, setEntered] = useState(false) // true after the load entrance — gates the card fade-in so toggles don't re-flicker
   const toolbarRef = useRef(null)
@@ -349,8 +376,8 @@ export default function App() {
       groups.get(k).push(m)
     }
     return columnKeys(memories, view2d).map((k, i) => {
-      // chronological within a column; Months collates to the first few (see collateColumn)
-      const items = collateColumn(groups.get(k) || [], view2d)
+      // chronological within a column; Months collates to a session-seeded sample (see collateColumn)
+      const items = collateColumn(groups.get(k) || [], view2d, k)
       return { key: k, colX: i * COL_W, colW: COL_W, items }
     })
   }, [memories, view2d])
@@ -624,8 +651,9 @@ export default function App() {
     const me = ms.find((m) => m.id === id)
     if (!me) return []
     const k = unitStart(me.date, view2dRef.current)
-    // same collation as the rendered column, so drag only considers visible cards
-    return collateColumn(ms.filter((m) => unitStart(m.date, view2dRef.current) === k), view2dRef.current)
+    // same collation (and same session-seeded sample) as the rendered column, so
+    // drag only considers visible cards — pass the key so the pick matches
+    return collateColumn(ms.filter((m) => unitStart(m.date, view2dRef.current) === k), view2dRef.current, k)
   }
 
   // Per-card TRANSIENT drag offset (0 at rest). The card's pointer drag writes
@@ -800,8 +828,16 @@ export default function App() {
     // happens in this commit — deferring the insert a frame bought nothing and
     // only made the new card mount late, out of sync with the close.
     if (editId) {
+      // editing in place — never counts against the per-day limit, always allowed
       setMemories((ms) => ms.map((m) => (m.id === editId ? { ...m, type, title, body, date, media: media || [], color } : m)))
     } else {
+      // new memory — cap each day at 4. If full, reject WITHOUT closing (the
+      // composer keeps its form + open state) and flag it with a top toast.
+      if (memories.filter((m) => m.date === date).length >= DAY_MAX) {
+        showToast('This day is full. Pick a different date.')
+        return
+      }
+      setToast(null)
       setMemories((ms) => [...ms, {
         id: crypto.randomUUID(),
         type, title, body, date,
@@ -1198,6 +1234,7 @@ export default function App() {
               editing={editId ? memories.find((m) => m.id === editId) : null}
               onClose={closeComposer}
               onAdd={addFromComposer}
+              notice={toast}
             />
           </motion.div>
         </motion.div>
