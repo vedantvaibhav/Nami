@@ -50,7 +50,10 @@ function StackImg({ id, style }) {
 function PhotoBlock({ m }) {
   const images = m.media.filter((x) => x.kind === 'image').slice(0, 4)
   const topUrl = useThumb(images[0]?.id)
-  if (!topUrl) return null
+  if (!images.length) return null
+  // Render the 4/3 box from mount (the src fills in when the thumbnail resolves)
+  // so the card reserves its full height immediately — it never grows a frame
+  // later when the thumb decodes, which used to shove the column's other cards.
   if (images.length === 1) {
     return <img className="card-photo" src={topUrl} alt={m.title || 'memory'} draggable={false} decoding="async" />
   }

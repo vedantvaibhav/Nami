@@ -1,3 +1,11 @@
+@font-face {
+  font-family: 'Neulis';
+  src: url('/fonts/Neulis-SemiBold.otf') format('opentype');
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+
 * { box-sizing: border-box; margin: 0; }
 
 html, body, #root { height: 100%; overflow: hidden; }
@@ -28,6 +36,80 @@ body {
 .view-layer {
   position: absolute; inset: 0;
 }
+/* the persistent fixed top nav sits on top, so start the product below it
+   (signed in AND out) instead of letting the nav crop the month markers. */
+.viewport-with-nav .view-layer { top: 64px; }
+
+/* ---- top nav (persistent) ---- */
+.top-nav {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 9999;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 28px; background: #FDFDFC;
+  border-bottom: 1px solid #F1F1EF; /* same as the month gridlines */
+}
+.nav-brand {
+  font-family: 'Neulis', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  font-size: 22px; font-weight: 600; letter-spacing: 0.01em; color: #16181D;
+}
+.nav-login {
+  display: inline-flex; align-items: center;
+  /* logo sits an equal 8px from the top and the left */
+  padding: 8px 12px 8px 8px;
+  background: #F1F1EF; border: none; border-radius: 20px; cursor: pointer; /* fill always on */
+  font-family: 'Inter', sans-serif; font-size: 13px; font-weight: 500; color: #6B7280;
+  transition: color 0.15s, background 0.15s;
+}
+.nav-login:hover { color: #16181D; background: #E8EAED; }
+.nav-login-logo { display: block; flex-shrink: 0; margin-right: 7px; }
+/* no flex gap: the chevron owns its own (animated) left margin so at rest it
+   reserves ZERO space — otherwise the gap padded the right edge even collapsed */
+.nav-login-chev {
+  display: inline-flex; align-items: center; overflow: hidden;
+  max-width: 0; margin-left: 0; opacity: 0; transform: translateX(-4px);
+  transition: max-width 0.22s ease, margin-left 0.22s ease, opacity 0.22s ease, transform 0.22s ease;
+}
+.nav-login-chev svg { display: block; }
+.nav-login:hover .nav-login-chev { max-width: 16px; margin-left: 6px; opacity: 1; transform: translateX(0); }
+
+/* profile avatar (signed in) — right slot of the nav */
+.nav-avatar {
+  width: 32px; height: 32px; border-radius: 50%; padding: 0; border: none; cursor: pointer;
+  overflow: hidden; background: #ECEEF1; display: grid; place-items: center;
+  transition: transform 0.12s;
+}
+.nav-avatar:hover { transform: scale(1.04); }
+.nav-avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.nav-avatar span { font-size: 13px; font-weight: 600; color: #4A5160; }
+
+/* account dropdown (signed in) — anchored under the avatar */
+.nav-account { position: relative; }
+.nav-menu {
+  position: absolute; top: calc(100% + 10px); right: 0; transform-origin: top right;
+  min-width: 220px; padding: 6px; z-index: 10000;
+  background: #FFFFFF; border: 1px solid #ECECE9; border-radius: 14px;
+  box-shadow: 0 12px 32px rgba(20, 20, 40, 0.12);
+  font-family: 'Inter', sans-serif;
+}
+.nav-menu-head {
+  display: flex; flex-direction: column; gap: 1px;
+  padding: 8px 10px 10px; margin-bottom: 4px; border-bottom: 1px solid #F1F1EF;
+}
+.nav-menu-name { font-size: 13px; font-weight: 600; color: #16181D; }
+.nav-menu-email { font-size: 12px; color: #8A8F98; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nav-menu-item {
+  display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; box-sizing: border-box;
+  padding: 8px 10px; border: none; background: none; border-radius: 9px; cursor: pointer;
+  font-family: inherit; font-size: 13px; font-weight: 500; color: #3A3F4A; text-decoration: none;
+  transition: background 0.12s, color 0.12s;
+}
+.nav-menu-item:hover { background: #F5F5F3; color: #16181D; }
+.nav-menu-icon { flex-shrink: 0; color: #8A8F98; transition: color 0.12s; }
+.nav-menu-item:hover .nav-menu-icon { color: inherit; }
+/* log out is destructive: icon stays red, text turns red on hover, and the
+   hover fill stays the same grey the other items use */
+.nav-menu-logout .nav-menu-icon { color: #E5484D; }
+.nav-menu-logout:hover { color: #E5484D; }
+.nav-menu-sep { height: 1px; margin: 4px 6px; background: #F1F1EF; }
 /* the inactive layer stays painted (opacity 0) for a smooth crossfade, but must
    not capture pointer/scroll. !important is required: R3F sets an inline
    pointer-events:auto on its <canvas> that would otherwise win over the wrapper. */
@@ -116,11 +198,12 @@ body {
 .card-photo {
   display: block; width: 100%; aspect-ratio: 4 / 3;
   object-fit: cover; border-radius: 14px; margin-top: 12px; pointer-events: none;
+  background: #E9EBEF; /* neutral placeholder while the thumbnail decodes */
 }
 /* multi-photo: a deck pinned in one spot, filling the card — only rotation
    differs so the prints underneath peek out at the corners. The extra top
    margin clears the rotated corners so they don't poke into the text above. */
-.photo-stack { position: relative; margin-top: 24px; margin-bottom: 14px; aspect-ratio: 4 / 3; }
+.photo-stack { position: relative; margin-top: 24px; margin-bottom: 14px; aspect-ratio: 4 / 3; border-radius: 12px; background: #E9EBEF; }
 .stack-img {
   position: absolute; inset: 0; width: 100%; height: 100%;
   object-fit: cover;
@@ -327,11 +410,15 @@ body {
 /* every print is the SAME 4:3 box (cover-cropped) so spacing is predictable
    regardless of the image's own aspect — otherwise tall/square images blow
    past their row and overlap massively */
-.lb-collage-img {
+.lb-collage-slot {
   position: absolute;
-  aspect-ratio: 4 / 3; object-fit: cover;
-  border-radius: 16px;
+  aspect-ratio: 4 / 3;
+  border-radius: 16px; overflow: hidden;
   box-shadow: 0 18px 50px rgba(0,0,0,0.35);
+}
+.lb-collage-img {
+  position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover;
+  transition: opacity 0.35s ease, filter 0.35s ease;
 }
 .lb-meta { text-align: center; color: #fff; max-width: 600px; }
 .lb-title { font-size: 18px; font-weight: 600; }
@@ -398,8 +485,13 @@ body {
 /* both faces stacked absolutely inside the shell, cross-faded */
 .dock-face { position: absolute; }
 .zoombar {
-  /* toolbar face: vertically centred, horizontally centred */
-  left: 50%; top: 50%; transform: translate(-50%, -50%);
+  /* toolbar face: pinned to the BOTTOM of the shell (like the composer face),
+     horizontally centred. The shell resizes with its bottom fixed (it grows/
+     shrinks from the top), so a bottom-anchored toolbar sits at its final resting
+     spot the whole time — it never drifts as the height animates. (Centring it
+     made it slide down a few px as the box finished shrinking = the close-end
+     glitch.) */
+  left: 50%; bottom: 0; transform: translateX(-50%);
   height: 48px; display: flex; align-items: center; gap: 4px; padding: 0 8px;
   white-space: nowrap;
 }
@@ -424,7 +516,7 @@ body {
 .zoom-pill {
   position: absolute; left: 0; top: 0;
   background: #16181D; color: #fff; font-size: 13px; font-weight: 600;
-  border-radius: 999px; height: 30px;
+  border-radius: 999px; height: 30px; padding: 0 8px;
   display: flex; align-items: center; justify-content: center;
   overflow: hidden; white-space: nowrap;
   cursor: grab; touch-action: none;
@@ -511,56 +603,3 @@ body {
   /* big upload block + composer breathe a little less on small screens */
   .composer { padding: 14px; gap: 12px; }
 }
-
-/* ---- logged-out login bar (replaces the dock when signed out) ---- */
-.login-bar {
-  pointer-events: auto; display: inline-flex; align-items: center; justify-content: center; gap: 10px;
-  height: 48px; padding: 0 22px; border: 1px solid #E3E5EA; border-radius: 24px;
-  background: #fff; color: #16181D; cursor: pointer;
-  font-family: inherit; font-size: 15px; font-weight: 600;
-  box-shadow: 0 4px 18px rgba(20,20,40,0.10), 0 1px 2px rgba(20,20,40,0.05);
-  transition: border-color 0.15s, box-shadow 0.15s;
-}
-.login-bar:hover { border-color: #C8CCD4; box-shadow: 0 8px 28px rgba(20,20,40,0.14); }
-.login-bar svg { flex-shrink: 0; }
-
-/* ---- profile avatar (top-right, signed in) ---- */
-.profile-btn {
-  position: fixed; top: 20px; right: 20px; z-index: 40;
-  width: 32px; height: 32px; border-radius: 50%; padding: 0; border: none; cursor: pointer;
-  overflow: hidden; background: #ECEEF1; display: grid; place-items: center;
-  transition: transform 0.12s;
-}
-.profile-btn:hover { transform: scale(1.04); }
-.profile-btn img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.profile-btn span { font-size: 13px; font-weight: 600; color: #4A5160; }
-
-/* ---- settings panel (modal) ---- */
-.settings-backdrop {
-  position: fixed; inset: 0; z-index: 60; display: grid; place-items: center;
-  background: rgba(20,20,30,0.28); backdrop-filter: blur(2px); padding: 24px;
-}
-.settings-panel {
-  position: relative; width: 100%; max-width: 360px; background: #fff; border-radius: 20px;
-  padding: 24px; box-shadow: 0 24px 64px rgba(20,20,40,0.22), 0 4px 12px rgba(20,20,40,0.1);
-}
-.settings-close {
-  position: absolute; top: 14px; right: 14px; width: 30px; height: 30px; border: none; border-radius: 50%;
-  background: transparent; color: #9AA0AC; font-size: 20px; line-height: 1; cursor: pointer;
-  transition: background 0.15s, color 0.15s;
-}
-.settings-close:hover { background: #F2F3F5; color: #16181D; }
-.settings-title { font-size: 18px; font-weight: 700; color: #16181D; margin-bottom: 18px; }
-.settings-account { display: flex; align-items: center; gap: 14px; margin-bottom: 22px; }
-.settings-avatar { width: 52px; height: 52px; border-radius: 50%; object-fit: cover; flex-shrink: 0; }
-.settings-avatar-fallback { display: grid; place-items: center; background: #ECEEF1; color: #4A5160; font-size: 20px; font-weight: 600; }
-.settings-account-text { min-width: 0; }
-.settings-name { font-size: 15px; font-weight: 600; color: #16181D; }
-.settings-email { font-size: 13px; color: #6B7280; overflow: hidden; text-overflow: ellipsis; }
-.settings-signout {
-  width: 100%; height: 46px; border: 1px solid #E3E5EA; border-radius: 12px;
-  background: #fff; color: #DB2777; cursor: pointer;
-  font-family: inherit; font-size: 15px; font-weight: 600;
-  transition: background 0.15s, border-color 0.15s;
-}
-.settings-signout:hover { background: #FEF2F7; border-color: #F6C6DB; }

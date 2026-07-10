@@ -118,12 +118,16 @@ export async function deleteImage(id) {
   kinds.delete(id)
 }
 
-// Full-resolution original — ONLY the lightbox should use this.
+// Full-resolution — ONLY the lightbox should use this. For images we add
+// q_auto,f_auto so Cloudinary serves an optimized format (WebP/AVIF) at auto
+// quality — a fraction of the raw JPEG's bytes, so it loads fast.
 export async function imageURL(id) {
   if (!id) return null
   const key = 'img:' + id
   if (urlCache.has(key)) return urlCache.get(key)
-  const url = `https://res.cloudinary.com/${CLOUD_NAME}/${deliveryType(id)}/upload/${id}`
+  const type = deliveryType(id)
+  const opt = type === 'image' ? 'q_auto,f_auto/' : ''
+  const url = `https://res.cloudinary.com/${CLOUD_NAME}/${type}/upload/${opt}${id}`
   urlCache.set(key, url)
   return url
 }

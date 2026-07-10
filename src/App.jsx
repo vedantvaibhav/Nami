@@ -6,18 +6,23 @@ import MemoryCard from './MemoryCard.jsx'
 import YearOrbit from './YearOrbit.jsx'
 import Lightbox from './Lightbox.jsx'
 import Composer from './Composer.jsx'
-import SettingsPanel from './SettingsPanel.jsx'
 import { supabase, userProfile } from './supabase.js'
 import { loadMemories, saveMemories, saveImageMedia, cachePreview, deleteImage, randomColorKey } from './store.js'
-import { kindFromMime, MAX_SAFE_BYTES } from './media.js'
+import { kindFromMime, MAX_SAFE_BYTES, seedFrac } from './media.js'
 import { ZOOMS, markerLabel, toISO, fromISO, unitStart, currentMonthDays, currentYearMonths } from './time.js'
 
 const MARKER_H = 130 // px reserved at top for date markers
 // LIQUID (the shared switch spring — pill morph + card glide) lives in anim.js
-// The dock morph — open and close use the SAME spring, so opening feels just
-// like closing in reverse (the close feel the user likes).
-const SHELL_CLOSE = { type: 'spring', stiffness: 320, damping: 36, mass: 1 }
-const SHELL_OPEN = SHELL_CLOSE
+// The dock morph. OPEN is a spring (the reverse-of-close feel). CLOSE is a
+// fixed-duration TWEEN, not a spring: adding an image grows the composer via its
+// own spring, so clicking Add interrupts that in-flight motion — a spring close
+// carries the leftover UPWARD velocity and drifts/stalls before reversing (the
+// "stuck in between, then goes" hitch), and its overdamped tail hangs near the
+// end over the taller distance. A tween interpolates from the current height
+// with no velocity carryover and no tail, so the shrink is smooth every time.
+// SWIFT (easeOutExpo-ish) keeps the snappy-then-soft character.
+const SHELL_OPEN = { type: 'spring', stiffness: 320, damping: 36, mass: 1 }
+const SHELL_CLOSE = { duration: 0.34, ease: SWIFT }
 // how long shellMorph stays true — must outlast the open tween / close settle
 const SHELL_MORPH_MS = 700
 
@@ -55,6 +60,143 @@ const collateColumn = (items, view) => {
   return view === 'months' ? sorted.slice(0, MONTHS_VIEW_MAX) : sorted
 }
 
+// The ordered column keys for a view. Days is sparse (only days with memories);
+// Months is continuous (every month from the earliest year to now). Both fall
+// back to a placeholder scaffold when empty so the canvas is never blank. Shared
+// by the `columns` memo and the zoom shrink-test so the two can't diverge.
+const columnKeys = (memories, view) => {
+  if (!memories) return []
+  if (view === 'months') {
+    if (!memories.length) return currentYearMonths()
+    const today = new Date()
+    let earliestYear = today.getFullYear()
+    for (const m of memories) earliestYear = Math.min(earliestYear, fromISO(m.date).getFullYear())
+    const keys = []
+    let d = new Date(earliestYear, 0, 1)
+    const end = new Date(today.getFullYear(), today.getMonth(), 1)
+    while (d <= end) { keys.push(toISO(d)); d = new Date(d.getFullYear(), d.getMonth() + 1, 1) }
+    return keys
+  }
+  const keys = [...new Set(memories.map((m) => unitStart(m.date, view)))].sort()
+  return keys.length ? keys : currentMonthDays()
+}
+
+// Shown to logged-out visitors so the product is visible immediately (read-only —
+// never written to Supabase). Placeholder entries; real Cloudinary media later.
+const DEMO_MEMORIES = [
+  { id: 'demo-1', type: 'note', title: 'Morning hike', body: 'First trail of the year', date: '2024-03-08', color: 'mint', media: [] },
+  { id: 'demo-2', type: 'note', title: "Dad's birthday", body: 'The whole family came', date: '2024-03-22', color: 'yellow', media: [] },
+  { id: 'demo-3', type: 'note', title: 'Beach day', body: '', date: '2024-04-14', color: 'blue', media: [] },
+  { id: 'demo-4', type: 'note', title: 'Garden party', body: "Mia's farewell evening", date: '2024-05-03', color: 'purple', media: [] },
+  { id: 'demo-5', type: 'note', title: 'Road trip', body: '3 days, 1,200 km', date: '2024-06-17', color: 'peach', media: [] },
+  { id: 'demo-6', type: 'note', title: 'Rooftop dinner', body: 'Golden hour over the city', date: '2024-06-28', color: 'pink', media: [] },
+]
+
+// Solid top nav (no gradient/blur) with a bottom border matching the month
+// gridlines, over the live demo timeline when signed out.
+// "Report a bug" / "Request a feature" open a Gmail compose window (new tab),
+// pre-addressed to SUPPORT_EMAIL with the subject filled in.
+const SUPPORT_EMAIL = 'vedant.vai@gmail.com'
+const gmailCompose = (subject) =>
+  `https://mail.google.com/mail/?view=cm&fs=1&to=${SUPPORT_EMAIL}&su=${encodeURIComponent(subject)}`
+
+// Account-menu icons (Lucide) — one shared <svg> wrapper, one path set each.
+const NAV_ICONS = {
+  bug: <><path d="M12 20v-9" /><path d="M14 7a4 4 0 0 1 4 4v3a6 6 0 0 1-12 0v-3a4 4 0 0 1 4-4z" /><path d="M14.12 3.88 16 2" /><path d="M21 21a4 4 0 0 0-3.81-4" /><path d="M21 5a4 4 0 0 1-3.55 3.97" /><path d="M22 13h-4" /><path d="M3 21a4 4 0 0 1 3.81-4" /><path d="M3 5a4 4 0 0 0 3.55 3.97" /><path d="M6 13H2" /><path d="m8 2 1.88 1.88" /><path d="M9 7.13V6a3 3 0 1 1 6 0v1.13" /></>,
+  feature: <><path d="M8.3 10a.7.7 0 0 1-.626-1.079L11.4 3a.7.7 0 0 1 1.198-.043L16.3 8.9a.7.7 0 0 1-.572 1.1Z" /><rect x="3" y="14" width="7" height="7" rx="1" /><circle cx="17.5" cy="17.5" r="3.5" /></>,
+  logout: <><path d="m16 17 5-5-5-5" /><path d="M21 12H9" /><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /></>,
+}
+const MenuIcon = ({ name }) => (
+  <svg className="nav-menu-icon" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    {NAV_ICONS[name]}
+  </svg>
+)
+
+// Persistent top nav across the whole product. Right slot: a profile avatar
+// (opens the account menu) when signed in, else the "Login" CTA.
+function TopNav({ session, profile, onSignIn, onSignOut }) {
+  const [menuOpen, setMenuOpen] = useState(false)
+  const accountRef = useRef(null)
+  // close the menu on an outside click or Escape
+  useEffect(() => {
+    if (!menuOpen) return
+    const onDown = (e) => { if (!accountRef.current?.contains(e.target)) setMenuOpen(false) }
+    const onKey = (e) => { if (e.key === 'Escape') setMenuOpen(false) }
+    window.addEventListener('pointerdown', onDown)
+    window.addEventListener('keydown', onKey)
+    return () => { window.removeEventListener('pointerdown', onDown); window.removeEventListener('keydown', onKey) }
+  }, [menuOpen])
+
+  return (
+    <div className="top-nav">
+      <span className="nav-brand">Nami</span>
+      {session ? (
+        <div className="nav-account" ref={accountRef}>
+          <button
+            className="nav-avatar"
+            onClick={() => setMenuOpen((o) => !o)}
+            title="Account"
+            aria-haspopup="menu"
+            aria-expanded={menuOpen}
+          >
+            {profile.avatarUrl
+              ? <img src={profile.avatarUrl} alt="" referrerPolicy="no-referrer" draggable={false} />
+              : <span>{profile.initial}</span>}
+          </button>
+          <AnimatePresence>
+            {menuOpen && (
+              <motion.div
+                className="nav-menu"
+                role="menu"
+                initial={{ opacity: 0, y: -6, scale: 0.98 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: -6, scale: 0.98 }}
+                transition={{ duration: 0.16, ease: SWIFT }}
+              >
+                {(profile.name || profile.email) && (
+                  <div className="nav-menu-head">
+                    {profile.name && <span className="nav-menu-name">{profile.name}</span>}
+                    {profile.email && <span className="nav-menu-email">{profile.email}</span>}
+                  </div>
+                )}
+                <a className="nav-menu-item" role="menuitem" href={gmailCompose('Nami bug report')} target="_blank" rel="noopener noreferrer" onClick={() => setMenuOpen(false)}>
+                  <MenuIcon name="bug" />
+                  Report a bug
+                </a>
+                <a className="nav-menu-item" role="menuitem" href={gmailCompose('Nami feature request')} target="_blank" rel="noopener noreferrer" onClick={() => setMenuOpen(false)}>
+                  <MenuIcon name="feature" />
+                  Request a feature
+                </a>
+                <div className="nav-menu-sep" />
+                <button className="nav-menu-item nav-menu-logout" role="menuitem" onClick={() => { setMenuOpen(false); onSignOut() }}>
+                  <MenuIcon name="logout" />
+                  Log out
+                </button>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+      ) : (
+        <button className="nav-login" onClick={onSignIn}>
+          <svg className="nav-login-logo" width="16" height="16" viewBox="0 0 18 18" aria-hidden="true">
+            <path fill="#4285F4" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.92c1.7-1.57 2.68-3.88 2.68-6.62z" />
+            <path fill="#34A853" d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.92-2.26c-.8.54-1.83.86-3.04.86-2.34 0-4.32-1.58-5.03-3.71H.96v2.33A9 9 0 0 0 9 18z" />
+            <path fill="#FBBC05" d="M3.97 10.71a5.41 5.41 0 0 1 0-3.42V4.96H.96a9 9 0 0 0 0 8.08l3.01-2.33z" />
+            <path fill="#EA4335" d="M9 3.58c1.32 0 2.51.45 3.44 1.35l2.58-2.59C13.46.89 11.43 0 9 0A9 9 0 0 0 .96 4.96l3.01 2.33C4.68 5.16 6.66 3.58 9 3.58z" />
+          </svg>
+          <span>Login</span>
+          <span className="nav-login-chev" aria-hidden="true">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M5 12h14" />
+              <path d="M13 6l6 6-6 6" />
+            </svg>
+          </span>
+        </button>
+      )}
+    </div>
+  )
+}
+
 export default function App() {
   const [memories, setMemories] = useState(null)
   const [zoomIdx, setZoomIdx] = useState(2) // open in Years view on load
@@ -81,7 +223,7 @@ export default function App() {
   // undefined = still resolving the initial session; null = signed out; object
   // = signed in. The render gate below uses these three states.
   const [session, setSession] = useState(undefined)
-  const [settingsOpen, setSettingsOpen] = useState(false)
+  const signingOut = useRef(false)
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setSession(data.session))
     const { data: sub } = supabase.auth.onAuthStateChange((_event, s) => setSession(s))
@@ -89,7 +231,14 @@ export default function App() {
   }, [])
   const signInWithGoogle = () =>
     supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: window.location.origin } })
-  const handleSignOut = () => { setSettingsOpen(false); supabase.auth.signOut() }
+  // Sign out, then hard-reload so the app lands on a FRESH demo state. A same-
+  // page swap (real memories → demo) morphed the orbit in place — cards stretched
+  // and content stayed stale until scroll. A reload sidesteps that entirely.
+  const handleSignOut = async () => {
+    signingOut.current = true // the SIGNED_OUT event fires before the reload — don't swap to demo in place
+    await supabase.auth.signOut()
+    window.location.reload()
+  }
   const [dockDims, setDockDims] = useState({ toolbarW: 462, composerH: 450 })
   const scrollRef = useRef(null)
 
@@ -155,7 +304,9 @@ export default function App() {
 
   // ---- load / persist -------------------------------------------------
   useEffect(() => {
-    if (!session) { setMemories([]); return } // logged out: show the empty base screen
+    if (signingOut.current) return // reload imminent — don't morph the orbit to demo in place
+    if (session === undefined) return // still resolving — stay on boot-blank, don't flash demo
+    if (!session) { setMemories(DEMO_MEMORIES); return } // logged out: read-only demo timeline
     loadMemories(session.user.id).then((saved) => {
       // start empty — only days the user actually adds to will appear
       const list = saved && saved.length ? saved : []
@@ -197,26 +348,7 @@ export default function App() {
       if (!groups.has(k)) groups.set(k, [])
       groups.get(k).push(m)
     }
-
-    let keys
-    if (view2d === 'months') {
-      if (!memories.length) {
-        keys = currentYearMonths() // empty state: all 12 months of this year
-      } else {
-        const today = new Date()
-        let earliestYear = today.getFullYear()
-        for (const m of memories) earliestYear = Math.min(earliestYear, fromISO(m.date).getFullYear())
-        keys = []
-        let d = new Date(earliestYear, 0, 1)
-        const end = new Date(today.getFullYear(), today.getMonth(), 1)
-        while (d <= end) { keys.push(toISO(d)); d = new Date(d.getFullYear(), d.getMonth() + 1, 1) }
-      }
-    } else {
-      keys = [...groups.keys()].sort() // ISO dates sort chronologically
-      if (!keys.length) keys = currentMonthDays() // empty state: this month's days
-    }
-
-    return keys.map((k, i) => {
+    return columnKeys(memories, view2d).map((k, i) => {
       // chronological within a column; Months collates to the first few (see collateColumn)
       const items = collateColumn(groups.get(k) || [], view2d)
       return { key: k, colX: i * COL_W, colW: COL_W, items }
@@ -273,7 +405,7 @@ export default function App() {
     const read = () => {
       const el = zoomIdRef.current === 'years' ? null : scrollRef.current
       const frac = el ? el.clientWidth / el.scrollWidth : 1
-      const w = Math.max(64, Math.min(TRACK_W, Math.round(TRACK_W * frac)))
+      const w = Math.max(88, Math.min(TRACK_W, Math.round(TRACK_W * frac))) // min keeps ≥8px padding around the label
       const maxScroll = el ? el.scrollWidth - el.clientWidth : 0
       const p = el && maxScroll > 0 ? el.scrollLeft / maxScroll : 0
       return { w, x: p * (TRACK_W - w) }
@@ -355,10 +487,21 @@ export default function App() {
 
   const pendingCenter = useRef(null)
   const pendingCenterDate = useRef(null)
+  // The flicker on a shrinking zoom (Months→Days) was never the flight itself —
+  // it was the browser AUTO-CLAMPING scrollLeft the instant the narrower canvas
+  // commits, before our restore lands, so the cards were measured against a
+  // clamped scroll for one frame. We defeat the clamp at the source: hold the
+  // canvas at least as wide as it was BEFORE the switch for the switch commit,
+  // restore scroll under that wide canvas (no clamp is possible), then release
+  // the floor on the next frame. With no clamp there's nothing to hide, so the
+  // shared-layout flight stays on in BOTH directions (framer's layoutScroll
+  // absorbs the release-frame re-narrowing — a pure scroll change, not a move).
+  const [zoomWidthFloor, setZoomWidthFloor] = useState(0)
   const setZoomKeepCenter = (idx) => {
     const el = scrollRef.current
     pendingCenter.current = null
     pendingCenterDate.current = null
+    setZoomWidthFloor(el ? el.scrollWidth : 0)
     // Keep you where your memories are across a zoom. From a 2D view (days/
     // months), anchor on the DATE at the viewport centre — so zooming out lands
     // on the month that actually holds that day, not back at fraction 0 (Jan).
@@ -395,7 +538,15 @@ export default function App() {
       el.scrollLeft = pendingCenter.current * (el.scrollWidth - el.clientWidth)
       pendingCenter.current = null
     }
-    const raf = requestAnimationFrame(() => syncThumb(true))
+    // layout + scroll are now settled for the new view. Next frame: drop the
+    // width floor so the canvas returns to its true width (the flight is already
+    // gliding, so re-narrowing here reads as a pure scroll change that
+    // layoutScroll absorbs, not a second move), and morph the pill.
+    const raf = requestAnimationFrame(() => {
+      setZoomWidthFloor(0)
+      if (el) el.scrollLeft = Math.min(el.scrollLeft, el.scrollWidth - el.clientWidth)
+      syncThumb(true)
+    })
     return () => cancelAnimationFrame(raf)
   }, [zoomIdx, widthPx, syncThumb])
 
@@ -433,6 +584,38 @@ export default function App() {
   const maxTopFor = (id) => {
     const visible = Math.max(120, window.innerHeight - COL_TOP - DOCK_CLEARANCE)
     return Math.max(0, visible - cardHeight(id))
+  }
+
+  // ---- months-view scatter (delight) -----------------------------------
+  // Lay a month's cards out top-to-bottom at varied heights so the wall reads
+  // hand-arranged rather than a flat stack — but with a HARD no-overlap
+  // guarantee. Each card is placed strictly below the previous card's bottom
+  // (plus MIN_GAP), and the leftover vertical space is handed out as seeded
+  // random gaps above/between/below the cards. Because every card sits below
+  // the one before it, cards (and their images) can never overlap; because the
+  // gaps sum to exactly the free space, the whole column always fits above the
+  // dock (there is no vertical scroll). Seeded by id → stable, never jitters.
+  // No tilt, no horizontal nudge: cards stay square and inside their column.
+  const SCATTER_MAX_GAP = 96 // most extra breathing room a card adds above itself
+  const scatterTops = (items) => {
+    const n = items.length
+    const colAvail = Math.max(120, window.innerHeight - COL_TOP - DOCK_CLEARANCE)
+    const heights = items.map((m) => cardHeight(m.id))
+    // Each card's extra gap is seeded on its OWN id and drawn from a per-slot
+    // budget, so a card's top depends only on the cards BEFORE it (their seeds +
+    // heights) — appending a card never moves the ones above it. The running
+    // cursor keeps every card strictly below the previous one (no overlap), and
+    // the budget keeps the whole column within colAvail (never under the dock).
+    const fixed = heights.reduce((a, b) => a + b, 0) + MIN_GAP * (n + 1)
+    const perSlot = Math.min(SCATTER_MAX_GAP, Math.max(0, (colAvail - fixed) / (n + 1)))
+    const tops = {}
+    let cursor = MIN_GAP + seedFrac(items[0].id + ':g') * perSlot
+    for (let i = 0; i < n; i++) {
+      tops[items[i].id] = Math.round(cursor)
+      const nextGap = i + 1 < n ? seedFrac(items[i + 1].id + ':g') * perSlot : 0
+      cursor += heights[i] + MIN_GAP + nextGap
+    }
+    return tops
   }
 
   // the dragged card's column-mates, derived at event time from fresh data
@@ -611,6 +794,11 @@ export default function App() {
   const addFromComposer = ({ title, body, date, media, color }) => {
     const hasMedia = media && media.length
     const type = !hasMedia && title && !body ? 'quote' : 'note'
+    // Insert in the SAME commit as the close. shellMorph (state, timer-cleared)
+    // and the size-measure bail-out already protect the shrink from mid-morph
+    // re-measures, and the card's image loads async (useThumb) so no decode
+    // happens in this commit — deferring the insert a frame bought nothing and
+    // only made the new card mount late, out of sync with the close.
     if (editId) {
       setMemories((ms) => ms.map((m) => (m.id === editId ? { ...m, type, title, body, date, media: media || [], color } : m)))
     } else {
@@ -669,14 +857,25 @@ export default function App() {
     const measure = () => {
       const tw = toolbarRef.current?.offsetWidth
       const ch = composerRef.current?.offsetHeight
-      setDockDims((d) => ({ toolbarW: tw || d.toolbarW, composerH: ch || d.composerH }))
+      setDockDims((d) => {
+        const toolbarW = tw || d.toolbarW, composerH = ch || d.composerH
+        // bail out (same reference) when nothing changed, so a re-measure never
+        // forces a needless re-render mid-morph
+        return toolbarW === d.toolbarW && composerH === d.composerH ? d : { toolbarW, composerH }
+      })
     }
     measure()
     const ro = new ResizeObserver(measure)
     if (toolbarRef.current) ro.observe(toolbarRef.current)
     if (composerRef.current) ro.observe(composerRef.current)
     return () => ro.disconnect()
-  }, [composerKey, zoomIdx, memories])
+    // `session` + `memories` matter: the dock mounts once the session resolves,
+    // and in demo mode memories are set while session is still loading — without
+    // a re-run here the toolbar keeps its stale default width (extra side padding
+    // until a zoom click). Re-measuring on every add used to hitch the close,
+    // but setDockDims now bails out when the size is unchanged (which it is on
+    // add — the composer keeps its content as it fades), so there's no re-render.
+  }, [composerKey, zoomIdx, memories, session])
 
   // Persist dropped/picked/pasted files as blobs, attach refs to the card
   const attachFiles = async (id, files) => {
@@ -753,7 +952,7 @@ export default function App() {
   pendingSeeds.current = []
 
   return (
-    <div className="viewport" onDragOver={(e) => e.preventDefault()} onDrop={onDrop}>
+    <div className="viewport viewport-with-nav" onDragOver={(e) => e.preventDefault()} onDrop={onDrop}>
       {/* Both views stay MOUNTED and cross-fade — remounting the 3D canvas on
           every Months↔Years switch (WebGL context + shaders + textures) was the
           source of the switch lag. But once a crossfade COMPLETES the inactive
@@ -784,7 +983,7 @@ export default function App() {
           offset when measuring layoutId flights — without it the programmatic
           scrollLeft restore (same commit) shifted every glide's origin/target */}
       <motion.div className="scroller" ref={scrollRef} layoutScroll>
-        <div className="canvas" style={{ width: widthPx }}>
+        <div className="canvas" style={{ width: Math.max(widthPx, zoomWidthFloor) }}>
           <div className="topline" />
           {columns.map(({ key, colX }) => {
             const d = fromISO(key)
@@ -806,6 +1005,15 @@ export default function App() {
               // a column is fully auto (flex stack + scatter) or fully manual
               // (absolute Y per card) for THIS view; the first drag flips it.
               const isManual = isManualCol(items)
+              // A non-manual MONTHS column gets the seeded scatter: cards are
+              // absolutely placed at non-overlapping, hand-arranged tops. It
+              // renders exactly like a manual column, so the drag/drop system and
+              // the Days↔Months flight need no special-casing — only the initial
+              // top differs (seed, not saved pos). The first drag flips it to a
+              // real manual column (onCardDragStart seeds every card from its
+              // live offsetTop, so the scattered layout is preserved with no jump).
+              const scattered = !isManual && view2d === 'months'
+              const scatterTop = scattered && items.length ? scatterTops(items) : null
               // cards WITHOUT a saved pos in a manual column (e.g. a memory just
               // added to a hand-arranged day) stack sequentially below the lowest
               // placed card — never at 0, never overlapping. The computed top is
@@ -821,7 +1029,7 @@ export default function App() {
               return (
               <div
                 key={key}
-                className={`column ${isManual ? 'column-manual' : ''}`}
+                className={`column ${(isManual || scattered) ? 'column-manual' : ''}`}
                 style={{ left: colX + 8, top: COL_TOP, width: COL_W - 16 }}
               >
                 <AnimatePresence>
@@ -843,6 +1051,8 @@ export default function App() {
                         fallbackCursor = top + cardHeight(m.id)
                         pendingSeeds.current.push({ id: m.id, view: view2d, top })
                       }
+                    } else if (scattered) {
+                      top = scatterTop[m.id]
                     }
                     return (
                     <MemoryCard
@@ -851,7 +1061,7 @@ export default function App() {
                       m={m}
                       index={idx}
                       entered={entered}
-                      manual={isManual}
+                      manual={isManual || scattered}
                       manualY={top}
                       yMV={cardYMV(m.id)}
                       instantLayout={dragActive.current}
@@ -888,14 +1098,13 @@ export default function App() {
       >
         <YearOrbit
           memories={memories}
-          active={orbitLive}
+          active={isYears || orbitLive}
           revealed={booted}
         />
       </motion.div>
       </motion.div>
 
       <div className="dock-wrap">
-        {session ? (
         <motion.div
           className={`dock-shell ${composerOpen ? 'dock-shell-open' : ''}`}
           initial={{ y: 84, opacity: 0 }}
@@ -965,8 +1174,8 @@ export default function App() {
               title="Zoom in"
             >+</button>
 
-            <span className="zoombar-divider" />
-            <button className="add-cta" onClick={openComposer}>Add</button>
+            {session && <span className="zoombar-divider" />}
+            {session && <button className="add-cta" onClick={openComposer}>Add</button>}
           </motion.div>
 
           {/* composer face */}
@@ -992,38 +1201,14 @@ export default function App() {
             />
           </motion.div>
         </motion.div>
-        ) : (
-        <motion.button
-          className="login-bar"
-          onClick={signInWithGoogle}
-          initial={{ y: 84, opacity: 0 }}
-          animate={{ y: booted ? 0 : 84, opacity: booted ? 1 : 0 }}
-          transition={{ y: { duration: 0.9, ease: SWIFT, delay: 1.1 }, opacity: { duration: 0.6, ease: 'easeOut', delay: 1.1 } }}
-        >
-          <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
-            <path fill="#4285F4" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.92c1.7-1.57 2.68-3.88 2.68-6.62z" />
-            <path fill="#34A853" d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.92-2.26c-.8.54-1.83.86-3.04.86-2.34 0-4.32-1.58-5.03-3.71H.96v2.33A9 9 0 0 0 9 18z" />
-            <path fill="#FBBC05" d="M3.97 10.71a5.41 5.41 0 0 1 0-3.42V4.96H.96a9 9 0 0 0 0 8.08l3.01-2.33z" />
-            <path fill="#EA4335" d="M9 3.58c1.32 0 2.51.45 3.44 1.35l2.58-2.59C13.46.89 11.43 0 9 0A9 9 0 0 0 .96 4.96l3.01 2.33C4.68 5.16 6.66 3.58 9 3.58z" />
-          </svg>
-          <span>Log in to continue</span>
-        </motion.button>
-        )}
       </div>
 
-      {session && (
-        <button className="profile-btn" onClick={() => setSettingsOpen(true)} title="Account">
-          {profile.avatarUrl
-            ? <img src={profile.avatarUrl} alt="" referrerPolicy="no-referrer" draggable={false} />
-            : <span>{profile.initial}</span>}
-        </button>
-      )}
-
-      <AnimatePresence>
-        {settingsOpen && session && (
-          <SettingsPanel user={session.user} onClose={() => setSettingsOpen(false)} onSignOut={handleSignOut} />
-        )}
-      </AnimatePresence>
+      <TopNav
+        session={session}
+        profile={profile}
+        onSignIn={signInWithGoogle}
+        onSignOut={handleSignOut}
+      />
 
       <AnimatePresence>
         {openCard && <Lightbox key={openCard.id} m={openCard} onClose={() => setOpenId(null)} />}

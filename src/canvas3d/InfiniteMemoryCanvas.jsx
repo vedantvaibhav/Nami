@@ -79,11 +79,22 @@ function getVideoTexture(url, onReady) {
   return texture
 }
 
-function MediaPlane({ position, scale, item, chunkCx, chunkCy, chunkCz, cameraGridRef, onOpen, introDelay = 0 }) {
+function MediaPlane({ position, scale, media, mediaIndex, chunkCx, chunkCy, chunkCz, cameraGridRef, onOpen, introDelay = 0 }) {
   const meshRef = useRef(null)
   const materialRef = useRef(null)
-  const localState = useRef({ opacity: 0, frame: 0, introScaled: false, introDone: false, scaleInit: false })
+  const localState = useRef({ opacity: 0, frame: 0, introScaled: false, introDone: false, scaleInit: false, needsSnap: false })
   const [texture, setTexture] = useState(null)
+
+  // Freeze the modulus to the media length this plane was BORN with. The tile
+  // picks its content by `mediaIndex % length`; if we used the LIVE length, an
+  // append (N -> N+1) would shift the remainder of EVERY mounted plane at once,
+  // so every visible tile would swap texture + aspect ("everything stretches on
+  // upload"). Locking the length means a live plane keeps its exact item across
+  // an add — only chunks generated afterwards (fresh tiles you scroll into) use
+  // the new length and can surface the new memory. The `??` guards a shrink
+  // (delete) where the frozen index would fall past the end.
+  const bornLen = useRef(media.length)
+  const item = media[mediaIndex % bornLen.current] ?? media[mediaIndex % media.length]
 
   useFrame(() => {
     const material = materialRef.current
@@ -120,10 +131,14 @@ function MediaPlane({ position, scale, item, chunkCx, chunkCy, chunkCz, cameraGr
       }
     }
 
-    // after the intro, EASE any size/aspect change (a live media remap when a
-    // photo is added) toward the new target instead of snapping — this is what
-    // stops the whole field from lurching/"trimming down" on upload
-    if (state.introDone) mesh.scale.lerp(displayScale, 0.16)
+    // after the intro: SNAP to the target when this plane was remapped to a
+    // different item (needsSnap) so a full media swap doesn't morph every card's
+    // aspect; otherwise EASE small same-item size refinements (keeps an upload
+    // from lurching/"trimming down").
+    if (state.introDone) {
+      if (state.needsSnap) { mesh.scale.copy(displayScale); state.needsSnap = false }
+      else mesh.scale.lerp(displayScale, 0.16)
+    }
 
     state.frame = (state.frame + 1) & 1
     if (state.opacity < INVIS_THRESHOLD && !mesh.visible && state.frame === 0 && state.introDone) return
@@ -167,7 +182,11 @@ function MediaPlane({ position, scale, item, chunkCx, chunkCy, chunkCz, cameraGr
   useEffect(() => {
     // Don't reset opacity here: on a live media remap that blinked the WHOLE
     // field out and back in. The new texture swaps in at the plane's current
-    // opacity, and the scale eases (see useFrame), so an upload no longer lurches.
+    // opacity so an upload no longer lurches.
+    // needsSnap: this plane was remapped to a DIFFERENT item — snap to its aspect
+    // next frame instead of morphing across two unrelated cards (that "stretch"
+    // was every card lerping to a new aspect on a full media swap / login-logout).
+    localState.current.needsSnap = true
     ;(item.isVideo ? getVideoTexture : getTexture)(item.url, (tex) => setTexture(tex))
   }, [item.url])
 
@@ -214,24 +233,23 @@ function Chunk({ cx, cy, cz, media, cameraGridRef, onOpen }) {
 
   return (
     <group>
-      {planes.map((plane) => {
-        const item = media[plane.mediaIndex % media.length]
-        if (!item) return null
-        return (
-          <MediaPlane
-            key={plane.id}
-            position={plane.position}
-            scale={plane.scale}
-            item={item}
-            chunkCx={cx}
-            chunkCy={cy}
-            chunkCz={cz}
-            cameraGridRef={cameraGridRef}
-            onOpen={onOpen}
-            introDelay={introDelayFor(plane.id)}
-          />
-        )
-      })}
+      {planes.map((plane) => (
+        // item is resolved inside MediaPlane against the length it was born with,
+        // so an append never remaps an already-mounted tile (see MediaPlane).
+        <MediaPlane
+          key={plane.id}
+          position={plane.position}
+          scale={plane.scale}
+          media={media}
+          mediaIndex={plane.mediaIndex}
+          chunkCx={cx}
+          chunkCy={cy}
+          chunkCz={cz}
+          cameraGridRef={cameraGridRef}
+          onOpen={onOpen}
+          introDelay={introDelayFor(plane.id)}
+        />
+      ))}
     </group>
   )
 }
