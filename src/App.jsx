@@ -22,7 +22,7 @@ const MARKER_H = 130 // px reserved at top for date markers
 // with no velocity carryover and no tail, so the shrink is smooth every time.
 // SWIFT (easeOutExpo-ish) keeps the snappy-then-soft character.
 const SHELL_OPEN = { type: 'spring', stiffness: 320, damping: 36, mass: 1 }
-const SHELL_CLOSE = { duration: 0.34, ease: SWIFT }
+const SHELL_CLOSE = { duration: 0.52, ease: SWIFT }
 // how long shellMorph stays true — must outlast the open tween / close settle
 const SHELL_MORPH_MS = 700
 
