@@ -97,12 +97,14 @@ body {
 .nav-menu-name { font-size: 13px; font-weight: 600; color: #16181D; }
 .nav-menu-email { font-size: 12px; color: #8A8F98; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .nav-menu-item {
-  display: block; width: 100%; text-align: left; box-sizing: border-box;
+  display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; box-sizing: border-box;
   padding: 8px 10px; border: none; background: none; border-radius: 9px; cursor: pointer;
   font-family: inherit; font-size: 13px; font-weight: 500; color: #3A3F4A; text-decoration: none;
   transition: background 0.12s, color 0.12s;
 }
 .nav-menu-item:hover { background: #F5F5F3; color: #16181D; }
+.nav-menu-icon { flex-shrink: 0; color: #8A8F98; transition: color 0.12s; }
+.nav-menu-item:hover .nav-menu-icon { color: inherit; }
 .nav-menu-sep { height: 1px; margin: 4px 6px; background: #F1F1EF; }
 /* the inactive layer stays painted (opacity 0) for a smooth crossfade, but must
    not capture pointer/scroll. !important is required: R3F sets an inline
