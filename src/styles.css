@@ -105,6 +105,10 @@ body {
 .nav-menu-item:hover { background: #F5F5F3; color: #16181D; }
 .nav-menu-icon { flex-shrink: 0; color: #8A8F98; transition: color 0.12s; }
 .nav-menu-item:hover .nav-menu-icon { color: inherit; }
+/* log out is destructive: icon stays red, text turns red on hover, and the
+   hover fill stays the same grey the other items use */
+.nav-menu-logout .nav-menu-icon { color: #E5484D; }
+.nav-menu-logout:hover { color: #E5484D; }
 .nav-menu-sep { height: 1px; margin: 4px 6px; background: #F1F1EF; }
 /* the inactive layer stays painted (opacity 0) for a smooth crossfade, but must
    not capture pointer/scroll. !important is required: R3F sets an inline

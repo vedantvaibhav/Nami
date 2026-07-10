@@ -88,12 +88,14 @@ const DEMO_MEMORIES = [
 
 // Solid top nav (no gradient/blur) with a bottom border matching the month
 // gridlines, over the live demo timeline when signed out.
-// Where "Report a bug" / "Request a feature" send you. A plain mailto: opened a
-// blank page on some setups, so we open a Gmail compose window instead —
-// pre-addressed to SUPPORT_EMAIL with the subject filled in (new tab).
+// Where "Report a bug" / "Request a feature" send you, pre-addressed with the
+// subject filled. Primary path is Gmail's web compose (reliable — a plain
+// mailto: opened a blank page on some setups); the mailto stays as the link's
+// href so if the Gmail popup is blocked it falls through to the default mail app.
 const SUPPORT_EMAIL = 'vedant.vai@gmail.com'
-const composeMail = (subject) =>
+const gmailCompose = (subject) =>
   `https://mail.google.com/mail/?view=cm&fs=1&to=${SUPPORT_EMAIL}&su=${encodeURIComponent(subject)}`
+const mailtoLink = (subject) => `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(subject)}`
 
 // Persistent top nav across the whole product. Right slot: a profile avatar
 // (opens the account menu) when signed in, else the "Login" CTA.
@@ -109,6 +111,14 @@ function TopNav({ session, profile, onSignIn, onSignOut }) {
     window.addEventListener('keydown', onKey)
     return () => { window.removeEventListener('pointerdown', onDown); window.removeEventListener('keydown', onKey) }
   }, [menuOpen])
+
+  // Open Gmail's compose in a new tab; if the popup is blocked, let the anchor's
+  // mailto href fall through to the default mail app.
+  const openMail = (e, subject) => {
+    setMenuOpen(false)
+    const w = window.open(gmailCompose(subject), '_blank', 'noopener,noreferrer')
+    if (w) e.preventDefault()
+  }
 
   return (
     <div className="top-nav">
@@ -142,20 +152,20 @@ function TopNav({ session, profile, onSignIn, onSignOut }) {
                     {profile.email && <span className="nav-menu-email">{profile.email}</span>}
                   </div>
                 )}
-                <a className="nav-menu-item" role="menuitem" href={composeMail('Nami bug report')} target="_blank" rel="noopener noreferrer" onClick={() => setMenuOpen(false)}>
+                <a className="nav-menu-item" role="menuitem" href={mailtoLink('Nami bug report')} onClick={(e) => openMail(e, 'Nami bug report')}>
                   <svg className="nav-menu-icon" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                     <path d="M12 20v-9" /><path d="M14 7a4 4 0 0 1 4 4v3a6 6 0 0 1-12 0v-3a4 4 0 0 1 4-4z" /><path d="M14.12 3.88 16 2" /><path d="M21 21a4 4 0 0 0-3.81-4" /><path d="M21 5a4 4 0 0 1-3.55 3.97" /><path d="M22 13h-4" /><path d="M3 21a4 4 0 0 1 3.81-4" /><path d="M3 5a4 4 0 0 0 3.55 3.97" /><path d="M6 13H2" /><path d="m8 2 1.88 1.88" /><path d="M9 7.13V6a3 3 0 1 1 6 0v1.13" />
                   </svg>
                   Report a bug
                 </a>
-                <a className="nav-menu-item" role="menuitem" href={composeMail('Nami feature request')} target="_blank" rel="noopener noreferrer" onClick={() => setMenuOpen(false)}>
+                <a className="nav-menu-item" role="menuitem" href={mailtoLink('Nami feature request')} onClick={(e) => openMail(e, 'Nami feature request')}>
                   <svg className="nav-menu-icon" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                     <path d="M8.3 10a.7.7 0 0 1-.626-1.079L11.4 3a.7.7 0 0 1 1.198-.043L16.3 8.9a.7.7 0 0 1-.572 1.1Z" /><rect x="3" y="14" width="7" height="7" rx="1" /><circle cx="17.5" cy="17.5" r="3.5" />
                   </svg>
                   Request a feature
                 </a>
                 <div className="nav-menu-sep" />
-                <button className="nav-menu-item" role="menuitem" onClick={() => { setMenuOpen(false); onSignOut() }}>
+                <button className="nav-menu-item nav-menu-logout" role="menuitem" onClick={() => { setMenuOpen(false); onSignOut() }}>
                   <svg className="nav-menu-icon" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                     <path d="m16 17 5-5-5-5" /><path d="M21 12H9" /><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
                   </svg>
