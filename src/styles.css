@@ -58,46 +58,80 @@ body {
   white-space: nowrap; pointer-events: none;
 }
 
-/* ---- bulk photo placement (full-screen takeover) ---- */
-.bulk-overlay {
+/* ---- bulk photo placement (blurred modal, one photo at a time) ---- */
+.bulk-backdrop {
   position: fixed; inset: 0; z-index: 10000;
-  background: #FDFDFC; display: flex; flex-direction: column;
+  display: grid; place-items: center; padding: 24px;
+  background: rgba(20, 20, 30, 0.35);
+  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
 }
-.bulk-panel { flex: 1; min-height: 0; overflow-y: auto; padding: 48px 28px 24px; }
-.bulk-title {
-  font-family: 'Inter', sans-serif; font-size: 26px; font-weight: 700;
-  color: #16181D; letter-spacing: -0.02em; text-align: center; margin-bottom: 30px;
+.bulk-card {
+  position: relative; width: min(720px, 92vw);
+  background: #FDFDFC; border-radius: 24px; padding: 22px;
+  box-shadow: 0 24px 70px rgba(20, 20, 40, 0.28);
+  display: flex; flex-direction: column; gap: 18px;
 }
-.bulk-grid { display: grid; gap: 20px; max-width: 860px; margin: 0 auto; }
-.bulk-item { display: flex; flex-direction: column; gap: 10px; }
-.bulk-thumb {
-  width: 100%; aspect-ratio: 4 / 3; object-fit: cover;
-  border-radius: 14px; background: #E9EBEF; display: block;
+.bulk-head { display: flex; align-items: baseline; justify-content: space-between; }
+.bulk-title { font-family: 'Inter', sans-serif; font-size: 20px; font-weight: 700; color: #16181D; letter-spacing: -0.01em; }
+.bulk-count { font-family: 'Inter', sans-serif; font-size: 13px; font-weight: 500; color: #8A8F98; }
+
+/* horizontal snap track — one photo fills it; scroll/toggle moves one at a time */
+.bulk-track { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; }
+.bulk-track::-webkit-scrollbar { display: none; }
+.bulk-slide {
+  flex: 0 0 100%; scroll-snap-align: center;
+  display: grid; grid-template-columns: 1.25fr 1fr; gap: 20px; align-items: center;
 }
-.bulk-date {
-  width: 100%; box-sizing: border-box; padding: 9px 12px;
-  border: 1px solid #E3E5EA; border-radius: 10px; background: #fff;
-  font-family: 'Inter', sans-serif; font-size: 14px; font-weight: 500; color: #16181D;
+.bulk-photo { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: 16px; background: #E9EBEF; display: block; }
+.bulk-side { display: flex; flex-direction: column; gap: 8px; }
+.bulk-side-label { font-family: 'Inter', sans-serif; font-size: 12px; font-weight: 600; color: #8A8F98; text-transform: uppercase; letter-spacing: 0.04em; }
+.bulk-datebtn {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 12px 14px; border: 1px solid #E3E5EA; border-radius: 12px; background: #fff; cursor: pointer;
+  font-family: 'Inter', sans-serif; font-size: 15px; font-weight: 500; color: #16181D;
+  transition: border-color 0.15s, background 0.15s;
 }
-.bulk-date:hover { border-color: #B8BCC4; }
-.bulk-bar {
-  display: flex; align-items: center; justify-content: flex-end; gap: 12px;
-  padding: 16px 28px; border-top: 1px solid #F1F1EF; background: #FDFDFC;
+.bulk-datebtn:hover { border-color: #B8BCC4; background: #FAFAFA; }
+.bulk-datebtn svg { color: #6B7280; flex-shrink: 0; }
+
+/* prev/next toggles, hanging just off the card edges */
+.bulk-nav {
+  position: absolute; top: 50%; transform: translateY(-50%);
+  width: 40px; height: 40px; border-radius: 50%; border: none; cursor: pointer;
+  background: #fff; color: #16181D; display: grid; place-items: center;
+  box-shadow: 0 4px 16px rgba(20, 20, 40, 0.18); z-index: 2;
+  transition: background 0.15s, opacity 0.15s;
 }
+.bulk-nav:hover:not(:disabled) { background: #F2F3F5; }
+.bulk-nav:disabled { opacity: 0.3; cursor: default; }
+.bulk-prev { left: -14px; }
+.bulk-next { right: -14px; }
+
+.bulk-bar { display: flex; align-items: center; justify-content: flex-end; gap: 12px; }
 .bulk-add {
   height: 44px; padding: 0 22px; border: none; border-radius: 12px;
   background: #16181D; color: #fff; cursor: pointer;
-  font-family: 'Inter', sans-serif; font-size: 15px; font-weight: 600;
-  transition: background 0.15s;
+  font-family: 'Inter', sans-serif; font-size: 15px; font-weight: 600; transition: background 0.15s;
 }
 .bulk-add:hover { background: #2C2F38; }
 .bulk-cancel {
   height: 44px; padding: 0 20px; border: none; border-radius: 12px;
   background: transparent; color: #6B7280; cursor: pointer;
-  font-family: 'Inter', sans-serif; font-size: 15px; font-weight: 500;
-  transition: background 0.15s, color 0.15s;
+  font-family: 'Inter', sans-serif; font-size: 15px; font-weight: 500; transition: background 0.15s, color 0.15s;
 }
 .bulk-cancel:hover { background: #F1F1EF; color: #16181D; }
+
+/* right slot of the nav when signed in: bulk-upload button + profile avatar */
+.nav-right { display: flex; align-items: center; gap: 14px; }
+.nav-bulk {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 7px 12px; border: none; border-radius: 20px; cursor: pointer;
+  background: #F1F1EF; color: #4A5160;
+  font-family: 'Inter', sans-serif; font-size: 13px; font-weight: 500;
+  transition: background 0.15s, color 0.15s;
+}
+.nav-bulk:hover { background: #E8EAED; color: #16181D; }
+.nav-bulk svg { flex-shrink: 0; }
 
 .nav-brand {
   font-family: 'Neulis', 'Helvetica Neue', Helvetica, Arial, sans-serif;
@@ -291,14 +325,6 @@ body {
   transition: background 0.15s; flex-shrink: 0;
 }
 .add-cta:hover { background: #F2F3F5; }
-/* bulk-upload button in the dock toolbar — icon-only, same feel as .add-cta */
-.bulk-cta {
-  height: 30px; width: 32px; padding: 0; border-radius: 999px; border: none;
-  background: transparent; color: #4A5160; cursor: pointer;
-  display: flex; align-items: center; justify-content: center;
-  transition: background 0.15s, color 0.15s; flex-shrink: 0;
-}
-.bulk-cta:hover { background: #F2F3F5; color: #16181D; }
 
 /* ---- shared icon-button pattern: no fill at rest, fill on hover/active ---- */
 .icon-btn {
@@ -413,7 +439,7 @@ body {
 .cmp-add:disabled { opacity: 0.4; cursor: default; }
 
 /* ---- custom calendar popover ---- */
-.cal-backdrop { position: fixed; inset: 0; z-index: 95; }
+.cal-backdrop { position: fixed; inset: 0; z-index: 10001; } /* above the dock AND the bulk modal (10000) */
 .cal-pop {
   position: fixed; /* left / width / bottom set inline to anchor above the date field */
   background: #fff; border-radius: 18px; padding: 14px 14px 20px;

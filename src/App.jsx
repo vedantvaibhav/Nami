@@ -134,9 +134,10 @@ const MenuIcon = ({ name }) => (
 
 // Persistent top nav across the whole product. Right slot: a profile avatar
 // (opens the account menu) when signed in, else the "Login" CTA.
-function TopNav({ session, profile, onSignIn, onSignOut }) {
+function TopNav({ session, profile, onSignIn, onSignOut, onBulkPick }) {
   const [menuOpen, setMenuOpen] = useState(false)
   const accountRef = useRef(null)
+  const bulkInputRef = useRef(null)
   // close the menu on an outside click or Escape
   useEffect(() => {
     if (!menuOpen) return
@@ -151,6 +152,23 @@ function TopNav({ session, profile, onSignIn, onSignOut }) {
     <div className="top-nav">
       <span className="nav-brand">Nami</span>
       {session ? (
+        <div className="nav-right">
+          <button className="nav-bulk" onClick={() => bulkInputRef.current?.click()}>
+            <Icon d={icons.upload} size={16} />
+            Bulk upload
+          </button>
+          <input
+            ref={bulkInputRef}
+            type="file"
+            accept="image/*"
+            multiple
+            hidden
+            onChange={(e) => {
+              const picked = [...e.target.files]
+              e.target.value = '' // allow re-picking the same files
+              if (picked.length) onBulkPick(picked)
+            }}
+          />
         <div className="nav-account" ref={accountRef}>
           <button
             className="nav-avatar"
@@ -196,6 +214,7 @@ function TopNav({ session, profile, onSignIn, onSignOut }) {
             )}
           </AnimatePresence>
         </div>
+        </div>
       ) : (
         <button className="nav-login" onClick={onSignIn}>
           <svg className="nav-login-logo" width="16" height="16" viewBox="0 0 18 18" aria-hidden="true">
@@ -224,7 +243,6 @@ export default function App() {
   const [composerOpen, setComposerOpen] = useState(false)
   const [composerKey, setComposerKey] = useState(0) // remount composer fresh on each open
   const [bulkFiles, setBulkFiles] = useState(null) // File[] while the bulk-placement modal is open
-  const bulkInputRef = useRef(null) // hidden multi-file picker behind the dock "bulk" button
   const [toast, setToast] = useState(null) // transient top toast (e.g. day-full); auto-dismisses
   const toastTimer = useRef(null)
   useEffect(() => () => clearTimeout(toastTimer.current), [])
@@ -1236,28 +1254,7 @@ export default function App() {
             >+</button>
 
             {session && <span className="zoombar-divider" />}
-            {session && (
-              <button
-                className="bulk-cta"
-                onClick={() => bulkInputRef.current?.click()}
-                title="Bulk upload photos"
-              >
-                <Icon d={icons.upload} size={18} />
-              </button>
-            )}
             {session && <button className="add-cta" onClick={openComposer}>Add</button>}
-            <input
-              ref={bulkInputRef}
-              type="file"
-              accept="image/*"
-              multiple
-              hidden
-              onChange={(e) => {
-                const picked = [...e.target.files]
-                e.target.value = '' // allow re-picking the same files
-                if (picked.length) setBulkFiles(picked)
-              }}
-            />
           </motion.div>
 
           {/* composer face */}
@@ -1291,6 +1288,7 @@ export default function App() {
         profile={profile}
         onSignIn={signInWithGoogle}
         onSignOut={handleSignOut}
+        onBulkPick={setBulkFiles}
       />
 
       <AnimatePresence>
