@@ -55,7 +55,7 @@ function PhotoBlock({ m }) {
   // so the card reserves its full height immediately — it never grows a frame
   // later when the thumb decodes, which used to shove the column's other cards.
   if (images.length === 1) {
-    return <img className="card-photo" src={topUrl || undefined} alt={m.title || 'memory'} draggable={false} decoding="async" />
+    return <img className="card-photo" src={topUrl} alt={m.title || 'memory'} draggable={false} decoding="async" />
   }
   const n = images.length
   return (
