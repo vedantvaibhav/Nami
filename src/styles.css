@@ -48,15 +48,6 @@ body {
   border-bottom: 1px solid #F1F1EF; /* same as the month gridlines */
 }
 
-/* transient toast, centred just below the nav / above the timeline */
-.toast {
-  position: fixed; top: 76px; left: 50%; z-index: 9998;
-  padding: 10px 18px; border-radius: 999px;
-  background: #16181D; color: #fff;
-  font-family: 'Inter', sans-serif; font-size: 14px; font-weight: 500; letter-spacing: -0.005em;
-  box-shadow: 0 10px 30px rgba(20,20,40,0.22), 0 2px 6px rgba(20,20,40,0.12);
-  white-space: nowrap; pointer-events: none;
-}
 .nav-brand {
   font-family: 'Neulis', 'Helvetica Neue', Helvetica, Arial, sans-serif;
   font-size: 22px; font-weight: 600; letter-spacing: 0.01em; color: #16181D;
@@ -343,11 +334,21 @@ body {
 .cmp-swatch:hover { transform: scale(1.1); }
 .cmp-swatch-sel { box-shadow: 0 0 0 2px #fff, 0 0 0 4px currentColor; }
 
+.cmp-add-wrap { position: relative; margin-top: 2px; }
 .cmp-add {
-  margin-top: 2px; height: 48px; border: none; border-radius: 14px;
+  height: 48px; width: 100%; border: none; border-radius: 14px;
   background: #16181D; color: #fff; cursor: pointer;
   font-family: inherit; font-size: 15px; font-weight: 600;
   transition: background 0.15s, opacity 0.15s;
+}
+/* transient warning toast, floated just above the Add CTA */
+.cmp-toast {
+  position: absolute; bottom: calc(100% + 8px); left: 0; right: 0;
+  padding: 9px 14px; border-radius: 12px; text-align: center;
+  background: #FDE7D3; color: #C2570B; /* soft peach warning, stands out over the dark CTA */
+  font-family: inherit; font-size: 13px; font-weight: 600; letter-spacing: -0.005em;
+  box-shadow: 0 8px 22px rgba(20,20,40,0.16), 0 1px 3px rgba(20,20,40,0.08);
+  pointer-events: none;
 }
 .cmp-add:hover:not(:disabled) { background: #2C2F38; }
 .cmp-add:disabled { opacity: 0.4; cursor: default; }
