@@ -54,6 +54,7 @@ const CARD_SETTLE = { type: 'tween', duration: 0.13, ease: [0.25, 1, 0.5, 1] }
 // column to at most a few cards — otherwise a busy month stacks past the bottom
 // of the viewport (below the dock). Days show everything.
 const MONTHS_VIEW_MAX = 3
+const DAY_MAX = 4 // most memories allowed on a single day
 const byDate = (a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0)
 
 // Seeded ONCE per page load (module scope = never re-rolls on an App re-render).
@@ -62,14 +63,13 @@ const byDate = (a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0)
 const SESSION_SEED = Math.random()
 
 // Pick a session-stable, month-varied sample of a busy month's cards. Each column
-// gets its own starting offset (from SESSION_SEED + the column key) so different
-// months surface different memories; the picked items are re-sorted by date so the
-// column still reads chronologically. Falls back to the first N if there's no key.
+// gets its own starting offset (SESSION_SEED + a per-key fraction from seedFrac,
+// whose rolling hash spreads adjacent month keys well apart) so different months
+// surface different memories; picked items are re-sorted by date so the column
+// still reads chronologically.
 const pickForMonth = (sorted, colKey) => {
   if (sorted.length <= MONTHS_VIEW_MAX) return sorted
-  if (!colKey) return sorted.slice(0, MONTHS_VIEW_MAX)
-  const hash = [...colKey].reduce((a, c) => a + c.charCodeAt(0), 0)
-  const offset = Math.floor((SESSION_SEED + hash / 1000) * sorted.length) % sorted.length
+  const offset = Math.floor((SESSION_SEED + seedFrac(colKey)) * sorted.length) % sorted.length
   const idxs = Array.from({ length: MONTHS_VIEW_MAX }, (_, i) => (offset + i) % sorted.length)
   return idxs.map((i) => sorted[i]).sort(byDate)
 }
@@ -833,7 +833,7 @@ export default function App() {
     } else {
       // new memory — cap each day at 4. If full, reject WITHOUT closing (the
       // composer keeps its form + open state) and flag it with a top toast.
-      if (memories.filter((m) => m.date === date).length >= 4) {
+      if (memories.filter((m) => m.date === date).length >= DAY_MAX) {
         showToast('This day is full. Pick a different date.')
         return
       }
