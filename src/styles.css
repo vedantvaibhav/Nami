@@ -328,19 +328,20 @@ body {
 }
 .cmp-date-icon { color: #6B7280; flex-shrink: 0; }
 
-/* swatches spread across their column and stretch to the date field's height
-   (rounded bars). No fixed gap — space-between owns the spacing, so a min gap
-   can't force the row wider than its column and skew the split. */
-.cmp-colors { display: flex; align-items: stretch; justify-content: space-between; }
+/* colour circles, centred in the row (smaller than the date field). No fixed
+   gap — space-between owns the spacing so it can't widen the column past its
+   share and skew the split; the six circles sit shoulder-to-shoulder. */
+.cmp-colors { display: flex; align-items: center; justify-content: space-between; }
 .cmp-swatch {
-  width: 18px; border-radius: 6px; cursor: pointer; padding: 0; flex-shrink: 0;
+  width: 20px; height: 20px; border-radius: 50%; cursor: pointer; padding: 0; flex-shrink: 0;
   border: 1px solid rgba(20,20,40,0.08);
-  transition: transform 0.12s, box-shadow 0.12s;
+  transition: transform 0.16s ease, box-shadow 0.14s ease;
 }
-.cmp-swatch:hover { transform: scale(1.1); }
-/* selected = just a colour border drawn INSIDE the bar (no white padding gap),
-   so the active swatch is exactly the field height like the rest */
-.cmp-swatch-sel { box-shadow: inset 0 0 0 2px currentColor; }
+/* hover: the circle lifts up a touch */
+.cmp-swatch:hover { transform: translateY(-4px); }
+/* selected: a colour ring around the circle — it's small enough that the ring
+   stays within the field height */
+.cmp-swatch-sel { box-shadow: 0 0 0 2px #fff, 0 0 0 4px currentColor; }
 
 .cmp-add {
   margin-top: 2px; height: 48px; border: none; border-radius: 14px;
