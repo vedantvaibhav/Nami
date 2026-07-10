@@ -338,7 +338,9 @@ body {
   transition: transform 0.12s, box-shadow 0.12s;
 }
 .cmp-swatch:hover { transform: scale(1.1); }
-.cmp-swatch-sel { box-shadow: 0 0 0 2px #fff, 0 0 0 4px currentColor; }
+/* inset ring so the selected swatch stays exactly the field height — an OUTER
+   ring painted a few px beyond the bar made it look taller than the date field */
+.cmp-swatch-sel { box-shadow: inset 0 0 0 2px #fff, inset 0 0 0 4px currentColor; }
 
 .cmp-add {
   margin-top: 2px; height: 48px; border: none; border-radius: 14px;
