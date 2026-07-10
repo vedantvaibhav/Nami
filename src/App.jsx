@@ -94,6 +94,18 @@ const SUPPORT_EMAIL = 'vedant.vai@gmail.com'
 const gmailCompose = (subject) =>
   `https://mail.google.com/mail/?view=cm&fs=1&to=${SUPPORT_EMAIL}&su=${encodeURIComponent(subject)}`
 
+// Account-menu icons (Lucide) — one shared <svg> wrapper, one path set each.
+const NAV_ICONS = {
+  bug: <><path d="M12 20v-9" /><path d="M14 7a4 4 0 0 1 4 4v3a6 6 0 0 1-12 0v-3a4 4 0 0 1 4-4z" /><path d="M14.12 3.88 16 2" /><path d="M21 21a4 4 0 0 0-3.81-4" /><path d="M21 5a4 4 0 0 1-3.55 3.97" /><path d="M22 13h-4" /><path d="M3 21a4 4 0 0 1 3.81-4" /><path d="M3 5a4 4 0 0 0 3.55 3.97" /><path d="M6 13H2" /><path d="m8 2 1.88 1.88" /><path d="M9 7.13V6a3 3 0 1 1 6 0v1.13" /></>,
+  feature: <><path d="M8.3 10a.7.7 0 0 1-.626-1.079L11.4 3a.7.7 0 0 1 1.198-.043L16.3 8.9a.7.7 0 0 1-.572 1.1Z" /><rect x="3" y="14" width="7" height="7" rx="1" /><circle cx="17.5" cy="17.5" r="3.5" /></>,
+  logout: <><path d="m16 17 5-5-5-5" /><path d="M21 12H9" /><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /></>,
+}
+const MenuIcon = ({ name }) => (
+  <svg className="nav-menu-icon" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    {NAV_ICONS[name]}
+  </svg>
+)
+
 // Persistent top nav across the whole product. Right slot: a profile avatar
 // (opens the account menu) when signed in, else the "Login" CTA.
 function TopNav({ session, profile, onSignIn, onSignOut }) {
@@ -142,22 +154,16 @@ function TopNav({ session, profile, onSignIn, onSignOut }) {
                   </div>
                 )}
                 <a className="nav-menu-item" role="menuitem" href={gmailCompose('Nami bug report')} target="_blank" rel="noopener noreferrer" onClick={() => setMenuOpen(false)}>
-                  <svg className="nav-menu-icon" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                    <path d="M12 20v-9" /><path d="M14 7a4 4 0 0 1 4 4v3a6 6 0 0 1-12 0v-3a4 4 0 0 1 4-4z" /><path d="M14.12 3.88 16 2" /><path d="M21 21a4 4 0 0 0-3.81-4" /><path d="M21 5a4 4 0 0 1-3.55 3.97" /><path d="M22 13h-4" /><path d="M3 21a4 4 0 0 1 3.81-4" /><path d="M3 5a4 4 0 0 0 3.55 3.97" /><path d="M6 13H2" /><path d="m8 2 1.88 1.88" /><path d="M9 7.13V6a3 3 0 1 1 6 0v1.13" />
-                  </svg>
+                  <MenuIcon name="bug" />
                   Report a bug
                 </a>
                 <a className="nav-menu-item" role="menuitem" href={gmailCompose('Nami feature request')} target="_blank" rel="noopener noreferrer" onClick={() => setMenuOpen(false)}>
-                  <svg className="nav-menu-icon" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                    <path d="M8.3 10a.7.7 0 0 1-.626-1.079L11.4 3a.7.7 0 0 1 1.198-.043L16.3 8.9a.7.7 0 0 1-.572 1.1Z" /><rect x="3" y="14" width="7" height="7" rx="1" /><circle cx="17.5" cy="17.5" r="3.5" />
-                  </svg>
+                  <MenuIcon name="feature" />
                   Request a feature
                 </a>
                 <div className="nav-menu-sep" />
                 <button className="nav-menu-item nav-menu-logout" role="menuitem" onClick={() => { setMenuOpen(false); onSignOut() }}>
-                  <svg className="nav-menu-icon" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                    <path d="m16 17 5-5-5-5" /><path d="M21 12H9" /><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-                  </svg>
+                  <MenuIcon name="logout" />
                   Log out
                 </button>
               </motion.div>

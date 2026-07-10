@@ -597,33 +597,3 @@ body {
   /* big upload block + composer breathe a little less on small screens */
   .composer { padding: 14px; gap: 12px; }
 }
-
-/* ---- settings panel (modal) ---- */
-.settings-backdrop {
-  position: fixed; inset: 0; z-index: 60; display: grid; place-items: center;
-  background: rgba(20,20,30,0.28); backdrop-filter: blur(2px); padding: 24px;
-}
-.settings-panel {
-  position: relative; width: 100%; max-width: 360px; background: #fff; border-radius: 20px;
-  padding: 24px; box-shadow: 0 24px 64px rgba(20,20,40,0.22), 0 4px 12px rgba(20,20,40,0.1);
-}
-.settings-close {
-  position: absolute; top: 14px; right: 14px; width: 30px; height: 30px; border: none; border-radius: 50%;
-  background: transparent; color: #9AA0AC; font-size: 20px; line-height: 1; cursor: pointer;
-  transition: background 0.15s, color 0.15s;
-}
-.settings-close:hover { background: #F2F3F5; color: #16181D; }
-.settings-title { font-size: 18px; font-weight: 700; color: #16181D; margin-bottom: 18px; }
-.settings-account { display: flex; align-items: center; gap: 14px; margin-bottom: 22px; }
-.settings-avatar { width: 52px; height: 52px; border-radius: 50%; object-fit: cover; flex-shrink: 0; }
-.settings-avatar-fallback { display: grid; place-items: center; background: #ECEEF1; color: #4A5160; font-size: 20px; font-weight: 600; }
-.settings-account-text { min-width: 0; }
-.settings-name { font-size: 15px; font-weight: 600; color: #16181D; }
-.settings-email { font-size: 13px; color: #6B7280; overflow: hidden; text-overflow: ellipsis; }
-.settings-signout {
-  width: 100%; height: 46px; border: 1px solid #E3E5EA; border-radius: 12px;
-  background: #fff; color: #DB2777; cursor: pointer;
-  font-family: inherit; font-size: 15px; font-weight: 600;
-  transition: background 0.15s, border-color 0.15s;
-}
-.settings-signout:hover { background: #FEF2F7; border-color: #F6C6DB; }
