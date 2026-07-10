@@ -125,10 +125,10 @@ export default function Composer({ active, defaultDate, editing, onClose, onAdd 
   const [anchor, setAnchor] = useState(null)
   const titleRef = useRef(null)
   const fileRef = useRef(null)
-  const dateBtnRef = useRef(null)
+  const metaRef = useRef(null) // the date+colours row — the calendar opens across its FULL width
 
   const toggleCal = () => {
-    const r = dateBtnRef.current?.getBoundingClientRect()
+    const r = metaRef.current?.getBoundingClientRect()
     if (r) setAnchor({ left: r.left, width: r.width, top: r.top })
     setCalOpen((o) => !o)
   }
@@ -223,8 +223,8 @@ export default function Composer({ active, defaultDate, editing, onClose, onAdd 
       {warn && <div className="cmp-warn">Some files couldn’t be added — try a smaller file.</div>}
 
       {/* one row: the date takes the left half, the colour swatches the right */}
-      <div className="cmp-meta">
-        <button ref={dateBtnRef} type="button" className="cmp-date" onClick={toggleCal}>
+      <div className="cmp-meta" ref={metaRef}>
+        <button type="button" className="cmp-date" onClick={toggleCal}>
           <span className="cmp-date-value">{prettyDate(date)}</span>
           <Icon d={icons.calendar} size={18} className="cmp-date-icon" />
         </button>
