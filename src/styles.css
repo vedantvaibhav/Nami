@@ -82,7 +82,7 @@ body {
 }
 
 /* coverflow deck — centred photo tilts its neighbours; drag/scroll/arrows/dots move it */
-.bulk-stage { width: 100%; }
+.bulk-stage { width: 100%; margin-top: 24px; } /* extra breathing room below the intro line */
 .bulk-swiper { width: 100%; height: 340px; padding-bottom: 40px; }
 .bulk-swiper .swiper-slide.bulk-slide {
   position: relative; width: 300px; height: 300px; overflow: hidden; background: #E9EBEF;
