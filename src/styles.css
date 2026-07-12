@@ -66,26 +66,27 @@ body {
   backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
 }
 .bulk-card {
-  position: relative; width: min(720px, 92vw);
+  position: relative; width: min(360px, 92vw);
   background: #FDFDFC; border-radius: 24px; padding: 22px;
   box-shadow: 0 24px 70px rgba(20, 20, 40, 0.28);
-  display: flex; flex-direction: column; gap: 18px;
+  display: flex; flex-direction: column; gap: 16px;
 }
+.bulk-card .bulk-swiper, .bulk-card .bulk-datebtn { margin-left: auto; margin-right: auto; }
 .bulk-head { display: flex; align-items: baseline; justify-content: space-between; }
 .bulk-title { font-family: 'Inter', sans-serif; font-size: 20px; font-weight: 700; color: #16181D; letter-spacing: -0.01em; }
 .bulk-count { font-family: 'Inter', sans-serif; font-size: 13px; font-weight: 500; color: #8A8F98; }
 
-/* horizontal snap track — one photo fills it; scroll/toggle moves one at a time */
-.bulk-track { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; }
-.bulk-track::-webkit-scrollbar { display: none; }
-.bulk-slide {
-  flex: 0 0 100%; scroll-snap-align: center;
-  display: grid; grid-template-columns: 1.25fr 1fr; gap: 20px; align-items: center;
+/* swiper "cards" deck — front card is the current photo; drag/scroll/arrows move it */
+.bulk-swiper { width: 240px; height: 320px; }
+.bulk-swiper-slide {
+  border-radius: 20px; overflow: hidden; background: #E9EBEF;
+  box-shadow: 0 10px 30px rgba(20, 20, 40, 0.16);
 }
-.bulk-photo { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: 16px; background: #E9EBEF; display: block; }
-.bulk-side { display: flex; flex-direction: column; gap: 8px; }
-.bulk-side-label { font-family: 'Inter', sans-serif; font-size: 12px; font-weight: 600; color: #8A8F98; text-transform: uppercase; letter-spacing: 0.04em; }
+.bulk-swiper-slide img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+/* date field beneath the deck — opens the shared calendar; picking advances */
 .bulk-datebtn {
+  width: 240px; box-sizing: border-box;
   display: flex; align-items: center; justify-content: space-between; gap: 8px;
   padding: 12px 14px; border: 1px solid #E3E5EA; border-radius: 12px; background: #fff; cursor: pointer;
   font-family: 'Inter', sans-serif; font-size: 15px; font-weight: 500; color: #16181D;
@@ -94,18 +95,10 @@ body {
 .bulk-datebtn:hover { border-color: #B8BCC4; background: #FAFAFA; }
 .bulk-datebtn svg { color: #6B7280; flex-shrink: 0; }
 
-/* prev/next toggles, hanging just off the card edges */
-.bulk-nav {
-  position: absolute; top: 50%; transform: translateY(-50%);
-  width: 40px; height: 40px; border-radius: 50%; border: none; cursor: pointer;
-  background: #fff; color: #16181D; display: grid; place-items: center;
-  box-shadow: 0 4px 16px rgba(20, 20, 40, 0.18); z-index: 2;
-  transition: background 0.15s, opacity 0.15s;
+.bulk-hint {
+  font-family: 'Inter', sans-serif; font-size: 12px; font-weight: 500; color: #9AA0AC;
+  text-align: center; margin: -4px 0 2px;
 }
-.bulk-nav:hover:not(:disabled) { background: #F2F3F5; }
-.bulk-nav:disabled { opacity: 0.3; cursor: default; }
-.bulk-prev { left: -14px; }
-.bulk-next { right: -14px; }
 
 .bulk-bar { display: flex; align-items: center; justify-content: flex-end; gap: 12px; }
 .bulk-add {
