@@ -58,35 +58,23 @@ body {
   white-space: nowrap; pointer-events: none;
 }
 
-/* ---- bulk photo placement (blurred modal, one photo at a time) ---- */
+/* ---- bulk photo placement (full-screen white takeover, coverflow deck) ---- */
 .bulk-backdrop {
-  position: fixed; inset: 0; z-index: 10000;
-  display: grid; place-items: center; padding: 24px;
-  background: rgba(20, 20, 30, 0.35);
-  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  position: fixed; inset: 0; z-index: 10000; background: #FDFDFC;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 26px;
 }
-.bulk-card {
-  position: relative; width: min(360px, 92vw);
-  background: #FDFDFC; border-radius: 24px; padding: 22px;
-  box-shadow: 0 24px 70px rgba(20, 20, 40, 0.28);
-  display: flex; flex-direction: column; gap: 16px;
-}
-.bulk-card .bulk-swiper, .bulk-card .bulk-datebtn { margin-left: auto; margin-right: auto; }
-.bulk-head { display: flex; align-items: baseline; justify-content: space-between; }
-.bulk-title { font-family: 'Inter', sans-serif; font-size: 20px; font-weight: 700; color: #16181D; letter-spacing: -0.01em; }
-.bulk-count { font-family: 'Inter', sans-serif; font-size: 13px; font-weight: 500; color: #8A8F98; }
 
-/* swiper "cards" deck — front card is the current photo; drag/scroll/arrows move it */
-.bulk-swiper { width: 240px; height: 320px; }
-.bulk-swiper-slide {
-  border-radius: 20px; overflow: hidden; background: #E9EBEF;
-  box-shadow: 0 10px 30px rgba(20, 20, 40, 0.16);
+/* coverflow deck — centred photo tilts its neighbours; drag/scroll/arrows/dots move it */
+.bulk-swiper { width: 100%; height: 350px; padding-bottom: 44px; }
+.bulk-swiper .swiper-slide.bulk-slide {
+  width: 300px; height: 300px; border-radius: 20px; overflow: hidden; background: #E9EBEF;
 }
-.bulk-swiper-slide img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.bulk-slide img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.bulk-swiper .swiper-pagination-bullet { background: #16181D !important; }
 
 /* date field beneath the deck — opens the shared calendar; picking advances */
 .bulk-datebtn {
-  width: 240px; box-sizing: border-box;
+  width: 300px; box-sizing: border-box;
   display: flex; align-items: center; justify-content: space-between; gap: 8px;
   padding: 12px 14px; border: 1px solid #E3E5EA; border-radius: 12px; background: #fff; cursor: pointer;
   font-family: 'Inter', sans-serif; font-size: 15px; font-weight: 500; color: #16181D;
@@ -95,12 +83,7 @@ body {
 .bulk-datebtn:hover { border-color: #B8BCC4; background: #FAFAFA; }
 .bulk-datebtn svg { color: #6B7280; flex-shrink: 0; }
 
-.bulk-hint {
-  font-family: 'Inter', sans-serif; font-size: 12px; font-weight: 500; color: #9AA0AC;
-  text-align: center; margin: -4px 0 2px;
-}
-
-.bulk-bar { display: flex; align-items: center; justify-content: flex-end; gap: 12px; }
+.bulk-bar { display: flex; align-items: center; justify-content: center; gap: 12px; }
 .bulk-add {
   height: 44px; padding: 0 22px; border: none; border-radius: 12px;
   background: #16181D; color: #fff; cursor: pointer;
