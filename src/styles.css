@@ -91,18 +91,24 @@ body {
 .bulk-slide img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .bulk-swiper .swiper-pagination-bullet { background: #16181D !important; }
 
-/* date badge sitting INSIDE the photo (bottom); opens the shared calendar */
+/* full-width date field sitting INSIDE the photo (bottom); opens the shared calendar */
 .bulk-datebtn {
-  position: absolute; bottom: 14px; left: 50%; transform: translateX(-50%);
-  display: inline-flex; align-items: center; gap: 9px;
-  padding: 11px 16px; border: none; border-radius: 12px; cursor: pointer;
+  position: absolute; bottom: 12px; left: 12px; right: 12px;
+  display: flex; align-items: center; justify-content: space-between; gap: 9px;
+  padding: 12px 16px; border: none; border-radius: 12px; cursor: pointer;
   background: rgba(255, 255, 255, 0.94); color: #16181D;
   -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px);
   font-family: 'Inter', sans-serif; font-size: 15px; font-weight: 600; white-space: nowrap;
   box-shadow: 0 4px 14px rgba(20, 20, 40, 0.18);
-  transition: box-shadow 0.15s, background 0.15s, color 0.15s;
+  transition: transform 0.15s, box-shadow 0.15s, background 0.15s, color 0.15s;
 }
 .bulk-datebtn svg { color: #6B7280; flex-shrink: 0; }
+/* prominent hover on a valid field (error fields keep their red ring) */
+.bulk-datebtn:not(.bulk-datebtn-error):hover {
+  background: #fff; transform: translateY(-2px);
+  box-shadow: 0 12px 30px rgba(20, 20, 40, 0.32);
+}
+.bulk-datebtn:not(.bulk-datebtn-error):hover svg { color: #16181D; }
 /* invalid: this day can't hold the photo -> red field */
 .bulk-datebtn-error { background: #FDE7E7; color: #C2361B; box-shadow: 0 0 0 2px #E5484D, 0 4px 14px rgba(20, 20, 40, 0.18); }
 .bulk-datebtn-error svg { color: #C2361B; }

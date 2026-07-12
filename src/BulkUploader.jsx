@@ -15,11 +15,11 @@ import { CalendarPopover, prettyDate } from './CalendarPopover.jsx'
 // (staggered) — see the `when: 'beforeChildren'` + delay/stagger below.
 const BACKDROP_V = {
   hidden: { opacity: 0 },
-  show: { opacity: 1, transition: { duration: 0.26, ease: 'easeOut', when: 'beforeChildren', delayChildren: 0.12, staggerChildren: 0.07 } },
+  show: { opacity: 1, transition: { duration: 0.28, ease: 'easeOut', when: 'beforeChildren', delayChildren: 0.18, staggerChildren: 0.12 } },
 }
 const RISE_V = {
-  hidden: { opacity: 0, y: 12 },
-  show: { opacity: 1, y: 0, transition: { duration: 0.4, ease: SWIFT } },
+  hidden: { opacity: 0, y: 16 },
+  show: { opacity: 1, y: 0, transition: { duration: 0.65, ease: SWIFT } },
 }
 
 // Full-screen (white) takeover for placing several photos: a Swiper coverflow
