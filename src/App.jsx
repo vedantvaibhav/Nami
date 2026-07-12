@@ -985,19 +985,25 @@ export default function App() {
     attachFiles(card.id, files)
   }
 
-  // Commit the bulk-placement modal: one card per photo on its chosen date,
-  // respecting the per-day cap (skip photos whose day is already full — counting
-  // both existing memories AND ones added earlier in this same batch).
+  // Commit the bulk-placement modal: photos sharing a date are GROUPED onto one
+  // card (chunked to the 4-images-per-card cap), and a day never exceeds DAY_MAX
+  // cards — any photos beyond a day's capacity are skipped and flagged.
   const handleBulkCommit = (assignments) => {
-    const counts = {}
-    let skipped = 0
+    const byDate = new Map()
     for (const { file, date } of assignments) {
-      if (counts[date] == null) counts[date] = (memories?.filter((m) => m.date === date).length) || 0
-      if (counts[date] >= DAY_MAX) { skipped++; continue }
-      counts[date]++
-      const card = blankCard(date)
-      setMemories((ms) => [...ms, card])
-      attachFiles(card.id, [file])
+      if (!byDate.has(date)) byDate.set(date, [])
+      byDate.get(date).push(file)
+    }
+    let skipped = 0
+    for (const [date, dateFiles] of byDate) {
+      const roomCards = Math.max(0, DAY_MAX - ((memories?.filter((m) => m.date === date).length) || 0))
+      const place = dateFiles.slice(0, roomCards * 4) // a day holds up to DAY_MAX cards x 4 images
+      skipped += dateFiles.length - place.length
+      for (let i = 0; i < place.length; i += 4) {
+        const card = blankCard(date)
+        setMemories((ms) => [...ms, card])
+        attachFiles(card.id, place.slice(i, i + 4))
+      }
     }
     setBulkFiles(null)
     if (skipped) showToast("Some photos weren't added. Those days were full.")
