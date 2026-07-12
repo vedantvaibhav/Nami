@@ -11,16 +11,15 @@ import { Icon } from './MemoryCard.jsx'
 import { CalendarPopover, prettyDate } from './CalendarPopover.jsx'
 
 // Full-screen (white) takeover for placing several dropped/selected photos: a
-// Swiper coverflow deck of the photos with the date picker beneath the centred
-// one. Picking a date sets that photo's date and advances to the next. Arrow
-// keys, scroll, drag, and the pagination dots all move the deck. Files are raw
-// File objects -> local preview URLs (revoked on unmount). No labels; just the
-// deck, the date field, and the Cancel / Add-to-timeline CTAs.
-export default function BulkUploader({ files, onClose, onCommit }) {
+// Swiper coverflow deck with each photo's date badged onto the image. Picking a
+// date advances to the next. `capacityFor(date)` (from App) = how many more
+// images that day can take; if more photos are assigned to a day than it can
+// hold, their date badge turns red and Add is disabled until it's resolved.
+export default function BulkUploader({ files, onClose, onCommit, capacityFor }) {
   const today = toISO(new Date())
   const [dates, setDates] = useState(() => files.map(() => today))
   const [current, setCurrent] = useState(0)
-  const [calAnchor, setCalAnchor] = useState(null) // rect of the date field while the calendar is open
+  const [calAnchor, setCalAnchor] = useState(null) // { left, width, top, index } while the calendar is open
   const swiperRef = useRef(null)
   const urls = useMemo(() => files.map((f) => URL.createObjectURL(f)), [files])
   useEffect(() => () => urls.forEach((u) => URL.revokeObjectURL(u)), [urls])
@@ -32,12 +31,19 @@ export default function BulkUploader({ files, onClose, onCommit }) {
     return () => window.removeEventListener('keydown', onKey)
   }, [calAnchor, onClose])
 
-  const openCal = (e) => {
+  // a day is over capacity when more batch photos are assigned to it than it can hold
+  const batchOn = (d) => dates.filter((x) => x === d).length
+  const overCap = (d) => batchOn(d) > capacityFor(d)
+  const currentInvalid = overCap(dates[current])
+  const anyInvalid = dates.some((d) => overCap(d))
+
+  const openCal = (e, i) => {
     const r = e.currentTarget.getBoundingClientRect()
-    setCalAnchor({ left: r.left, width: r.width, top: r.top })
+    setCalAnchor({ left: r.left, width: Math.max(r.width, 220), top: r.top, index: i })
   }
   const pickDate = (d) => {
-    setDates((arr) => arr.map((v, j) => (j === current ? d : v)))
+    const i = calAnchor.index
+    setDates((arr) => arr.map((v, j) => (j === i ? d : v)))
     setCalAnchor(null)
     if (current < files.length - 1) swiperRef.current?.slideNext() // placed -> next photo
   }
@@ -55,6 +61,16 @@ export default function BulkUploader({ files, onClose, onCommit }) {
       exit={{ opacity: 0 }}
       transition={{ duration: 0.2, ease: 'easeOut' }}
     >
+      <button className="bulk-close" onClick={onClose} title="Close">
+        <Icon d={icons.close} size={18} />
+        <span>esc</span>
+      </button>
+
+      <div className="bulk-intro">
+        <h2 className="bulk-title">Bulk upload</h2>
+        <p className="bulk-sub">Assign a date to each photo</p>
+      </div>
+
       <Swiper
         className="bulk-swiper"
         effect="coverflow"
@@ -73,24 +89,29 @@ export default function BulkUploader({ files, onClose, onCommit }) {
         {files.map((f, i) => (
           <SwiperSlide key={i} className="bulk-slide">
             <img src={urls[i]} alt="" draggable={false} />
+            <button
+              className={`bulk-datebtn ${overCap(dates[i]) ? 'bulk-datebtn-error' : ''}`}
+              type="button"
+              style={{ pointerEvents: i === current ? 'auto' : 'none' }}
+              onClick={(e) => { e.stopPropagation(); openCal(e, i) }}
+            >
+              <span>{prettyDate(dates[i])}</span>
+              <Icon d={icons.calendar} size={16} />
+            </button>
           </SwiperSlide>
         ))}
       </Swiper>
 
-      <button className="bulk-datebtn" type="button" onClick={openCal}>
-        <span>{prettyDate(dates[current])}</span>
-        <Icon d={icons.calendar} size={18} />
-      </button>
+      <p className="bulk-error" style={{ visibility: currentInvalid ? 'visible' : 'hidden' }}>
+        This day is full. Pick another date.
+      </p>
 
-      <div className="bulk-bar">
-        <button className="bulk-cancel" onClick={onClose}>Cancel</button>
-        <button className="bulk-add" onClick={commit}>Add to timeline</button>
-      </div>
+      <button className="bulk-add" disabled={anyInvalid} onClick={commit}>Add to timeline</button>
 
       <AnimatePresence>
         {calAnchor && (
           <CalendarPopover
-            value={dates[current]}
+            value={dates[calAnchor.index]}
             max={today}
             anchor={calAnchor}
             onChange={pickDate}

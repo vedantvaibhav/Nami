@@ -1307,6 +1307,7 @@ export default function App() {
             files={bulkFiles}
             onClose={() => setBulkFiles(null)}
             onCommit={handleBulkCommit}
+            capacityFor={(date) => Math.max(0, DAY_MAX - ((memories?.filter((m) => m.date === date).length) || 0)) * 4}
           />
         )}
       </AnimatePresence>
