@@ -48,8 +48,11 @@ export default function BulkUploader({ files, onClose, onCommit, capacityFor }) 
   const anyInvalid = dates.some((d) => overCap(d))
 
   const openCal = (e, i) => {
-    const r = e.currentTarget.getBoundingClientRect()
-    setCalAnchor({ left: r.left, width: Math.max(r.width, 220), top: r.top, index: i })
+    // span the FULL photo width (anchor to the slide, not the narrow badge) and
+    // open just above the badge, so the calendar covers the picture and isn't clipped
+    const badge = e.currentTarget.getBoundingClientRect()
+    const slide = e.currentTarget.closest('.bulk-slide')?.getBoundingClientRect() || badge
+    setCalAnchor({ left: slide.left, width: slide.width, top: badge.top, index: i })
   }
   const pickDate = (d) => {
     const i = calAnchor.index
