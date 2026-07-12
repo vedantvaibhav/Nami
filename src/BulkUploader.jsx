@@ -5,16 +5,27 @@ import { EffectCoverflow, Pagination, Keyboard, Mousewheel } from 'swiper/module
 import 'swiper/css'
 import 'swiper/css/effect-coverflow'
 import 'swiper/css/pagination'
+import { SWIFT } from './anim.js'
 import { toISO } from './time.js'
 import { icons } from './media.js'
 import { Icon } from './MemoryCard.jsx'
 import { CalendarPopover, prettyDate } from './CalendarPopover.jsx'
 
-// Full-screen (white) takeover for placing several dropped/selected photos: a
-// Swiper coverflow deck with each photo's date badged onto the image. Picking a
-// date advances to the next. `capacityFor(date)` (from App) = how many more
-// images that day can take; if more photos are assigned to a day than it can
-// hold, their date badge turns red and Add is disabled until it's resolved.
+// Entrance: the white backdrop dissolves in first, THEN its children rise/fade in
+// (staggered) — see the `when: 'beforeChildren'` + delay/stagger below.
+const BACKDROP_V = {
+  hidden: { opacity: 0 },
+  show: { opacity: 1, transition: { duration: 0.26, ease: 'easeOut', when: 'beforeChildren', delayChildren: 0.12, staggerChildren: 0.07 } },
+}
+const RISE_V = {
+  hidden: { opacity: 0, y: 12 },
+  show: { opacity: 1, y: 0, transition: { duration: 0.4, ease: SWIFT } },
+}
+
+// Full-screen (white) takeover for placing several photos: a Swiper coverflow
+// deck with each photo's date badged onto the image. Picking a date advances to
+// the next. `capacityFor(date)` (from App) = how many more images that day can
+// take; over-assigning a day turns its date badge red and disables Add.
 export default function BulkUploader({ files, onClose, onCommit, capacityFor }) {
   const today = toISO(new Date())
   const [dates, setDates] = useState(() => files.map(() => today))
@@ -31,7 +42,6 @@ export default function BulkUploader({ files, onClose, onCommit, capacityFor }) 
     return () => window.removeEventListener('keydown', onKey)
   }, [calAnchor, onClose])
 
-  // a day is over capacity when more batch photos are assigned to it than it can hold
   const batchOn = (d) => dates.filter((x) => x === d).length
   const overCap = (d) => batchOn(d) > capacityFor(d)
   const currentInvalid = overCap(dates[current])
@@ -56,57 +66,57 @@ export default function BulkUploader({ files, onClose, onCommit, capacityFor }) 
   return (
     <motion.div
       className="bulk-backdrop"
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      transition={{ duration: 0.2, ease: 'easeOut' }}
+      variants={BACKDROP_V}
+      initial="hidden"
+      animate="show"
+      exit={{ opacity: 0, transition: { duration: 0.2 } }}
     >
-      <button className="bulk-close" onClick={onClose} title="Close">
+      <motion.button className="bulk-close" variants={RISE_V} onClick={onClose} title="Close (Esc)">
         <Icon d={icons.close} size={18} />
-        <span>esc</span>
-      </button>
+      </motion.button>
 
-      <div className="bulk-intro">
-        <h2 className="bulk-title">Bulk upload</h2>
-        <p className="bulk-sub">Assign a date to each photo</p>
-      </div>
+      <motion.p className="bulk-intro" variants={RISE_V}>Assign a date to each photo</motion.p>
 
-      <Swiper
-        className="bulk-swiper"
-        effect="coverflow"
-        grabCursor
-        centeredSlides
-        slidesPerView="auto"
-        spaceBetween={0}
-        coverflowEffect={{ rotate: 40, stretch: 0, depth: 100, modifier: 1, slideShadows: true }}
-        keyboard={{ enabled: true }}
-        mousewheel={{ forceToAxis: true }}
-        pagination={{ clickable: true }}
-        modules={[EffectCoverflow, Pagination, Keyboard, Mousewheel]}
-        onSwiper={(s) => { swiperRef.current = s }}
-        onSlideChange={(s) => setCurrent(s.activeIndex)}
-      >
-        {files.map((f, i) => (
-          <SwiperSlide key={i} className="bulk-slide">
-            <img src={urls[i]} alt="" draggable={false} />
-            <button
-              className={`bulk-datebtn ${overCap(dates[i]) ? 'bulk-datebtn-error' : ''}`}
-              type="button"
-              style={{ pointerEvents: i === current ? 'auto' : 'none' }}
-              onClick={(e) => { e.stopPropagation(); openCal(e, i) }}
-            >
-              <span>{prettyDate(dates[i])}</span>
-              <Icon d={icons.calendar} size={16} />
-            </button>
-          </SwiperSlide>
-        ))}
-      </Swiper>
+      <motion.div className="bulk-stage" variants={RISE_V}>
+        <Swiper
+          className="bulk-swiper"
+          effect="coverflow"
+          grabCursor
+          centeredSlides
+          slidesPerView="auto"
+          spaceBetween={0}
+          coverflowEffect={{ rotate: 40, stretch: 0, depth: 100, modifier: 1, slideShadows: true }}
+          keyboard={{ enabled: true }}
+          mousewheel={{ forceToAxis: true }}
+          pagination={{ clickable: true }}
+          modules={[EffectCoverflow, Pagination, Keyboard, Mousewheel]}
+          onSwiper={(s) => { swiperRef.current = s }}
+          onSlideChange={(s) => setCurrent(s.activeIndex)}
+        >
+          {files.map((f, i) => (
+            <SwiperSlide key={i} className="bulk-slide">
+              <img src={urls[i]} alt="" draggable={false} />
+              <button
+                className={`bulk-datebtn ${overCap(dates[i]) ? 'bulk-datebtn-error' : ''}`}
+                type="button"
+                style={{ pointerEvents: i === current ? 'auto' : 'none' }}
+                onClick={(e) => { e.stopPropagation(); openCal(e, i) }}
+              >
+                <span>{prettyDate(dates[i])}</span>
+                <Icon d={icons.calendar} size={17} />
+              </button>
+            </SwiperSlide>
+          ))}
+        </Swiper>
+      </motion.div>
 
       <p className="bulk-error" style={{ visibility: currentInvalid ? 'visible' : 'hidden' }}>
         This day is full. Pick another date.
       </p>
 
-      <button className="bulk-add" disabled={anyInvalid} onClick={commit}>Add to timeline</button>
+      <motion.button className="bulk-add" variants={RISE_V} disabled={anyInvalid} onClick={commit}>
+        Add to timeline
+      </motion.button>
 
       <AnimatePresence>
         {calAnchor && (

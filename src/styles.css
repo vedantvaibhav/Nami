@@ -65,38 +65,40 @@ body {
   padding: 24px;
 }
 
-/* close (top-right) with an "esc" hint — Escape also closes */
+/* close (top-right) — a simple circle X; Escape also closes */
 .bulk-close {
   position: absolute; top: 22px; right: 24px;
-  display: inline-flex; align-items: center; gap: 6px;
-  padding: 7px 12px 7px 10px; border: none; border-radius: 999px; cursor: pointer;
+  width: 40px; height: 40px; border: none; border-radius: 50%; cursor: pointer;
+  display: grid; place-items: center;
   background: #F1F1EF; color: #4A5160;
-  font-family: 'Inter', sans-serif; font-size: 12px; font-weight: 600; letter-spacing: 0.02em;
   transition: background 0.15s, color 0.15s;
 }
 .bulk-close:hover { background: #E8EAED; color: #16181D; }
 
-/* intro text at the top; the deck sits below it */
-.bulk-intro { text-align: center; margin-top: 4px; }
-.bulk-title { font-family: 'Inter', sans-serif; font-size: 24px; font-weight: 700; color: #16181D; letter-spacing: -0.02em; }
-.bulk-sub { font-family: 'Inter', sans-serif; font-size: 14px; font-weight: 500; color: #8A8F98; margin-top: 4px; }
+/* one line of intro, in the title font but regular + grayish; deck sits below it */
+.bulk-intro {
+  font-family: 'Inter', sans-serif; font-size: 24px; font-weight: 400;
+  color: #9AA0AC; letter-spacing: -0.02em; text-align: center; margin: 4px 0 0;
+}
 
 /* coverflow deck — centred photo tilts its neighbours; drag/scroll/arrows/dots move it */
+.bulk-stage { width: 100%; }
 .bulk-swiper { width: 100%; height: 340px; padding-bottom: 40px; }
 .bulk-swiper .swiper-slide.bulk-slide {
-  position: relative; width: 300px; height: 300px; overflow: hidden; background: #E9EBEF; /* square, no roundness */
+  position: relative; width: 300px; height: 300px; overflow: hidden; background: #E9EBEF;
+  border-radius: 18px;
 }
 .bulk-slide img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .bulk-swiper .swiper-pagination-bullet { background: #16181D !important; }
 
 /* date badge sitting INSIDE the photo (bottom); opens the shared calendar */
 .bulk-datebtn {
-  position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%);
-  display: inline-flex; align-items: center; gap: 8px;
-  padding: 8px 12px; border: none; border-radius: 10px; cursor: pointer;
-  background: rgba(255, 255, 255, 0.92); color: #16181D;
+  position: absolute; bottom: 14px; left: 50%; transform: translateX(-50%);
+  display: inline-flex; align-items: center; gap: 9px;
+  padding: 11px 16px; border: none; border-radius: 12px; cursor: pointer;
+  background: rgba(255, 255, 255, 0.94); color: #16181D;
   -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px);
-  font-family: 'Inter', sans-serif; font-size: 13px; font-weight: 600; white-space: nowrap;
+  font-family: 'Inter', sans-serif; font-size: 15px; font-weight: 600; white-space: nowrap;
   box-shadow: 0 4px 14px rgba(20, 20, 40, 0.18);
   transition: box-shadow 0.15s, background 0.15s, color 0.15s;
 }
