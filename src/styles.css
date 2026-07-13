@@ -48,6 +48,93 @@ body {
   border-bottom: 1px solid #F1F1EF; /* same as the month gridlines */
 }
 
+/* top toast — used for messages shown while the composer is closed */
+.toast {
+  position: fixed; top: 76px; left: 50%; z-index: 9998;
+  padding: 10px 18px; border-radius: 999px;
+  background: #16181D; color: #fff;
+  font-family: 'Inter', sans-serif; font-size: 14px; font-weight: 500; letter-spacing: -0.005em;
+  box-shadow: 0 10px 30px rgba(20,20,40,0.22), 0 2px 6px rgba(20,20,40,0.12);
+  white-space: nowrap; pointer-events: none;
+}
+
+/* ---- bulk photo placement (full-screen white takeover, coverflow deck) ---- */
+.bulk-backdrop {
+  position: fixed; inset: 0; z-index: 10000; background: #FDFDFC;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px;
+  padding: 24px;
+}
+
+/* close (top-right) — a simple circle X; Escape also closes */
+.bulk-close {
+  position: absolute; top: 22px; right: 24px;
+  width: 40px; height: 40px; border: none; border-radius: 50%; cursor: pointer;
+  display: grid; place-items: center;
+  background: #F1F1EF; color: #4A5160;
+  transition: background 0.15s, color 0.15s;
+}
+.bulk-close:hover { background: #E8EAED; color: #16181D; }
+
+/* one line of intro, in the title font but regular + grayish; deck sits below it */
+.bulk-intro {
+  font-family: 'Inter', sans-serif; font-size: 24px; font-weight: 400;
+  color: #9AA0AC; letter-spacing: -0.02em; text-align: center; margin: 4px 0 0;
+}
+
+/* coverflow deck — centred photo tilts its neighbours; drag/scroll/arrows/dots move it */
+.bulk-stage { width: 100%; margin-top: 24px; } /* extra breathing room below the intro line */
+.bulk-swiper { width: 100%; height: 340px; padding-bottom: 40px; }
+.bulk-swiper .swiper-slide.bulk-slide {
+  position: relative; width: 300px; height: 300px; overflow: hidden; background: #E9EBEF;
+  border-radius: 18px;
+}
+.bulk-slide img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.bulk-swiper .swiper-pagination-bullet { background: #16181D !important; }
+
+/* full-width date field sitting INSIDE the photo (bottom); opens the shared calendar */
+.bulk-datebtn {
+  position: absolute; bottom: 12px; left: 12px; right: 12px;
+  display: flex; align-items: center; justify-content: space-between; gap: 9px;
+  padding: 12px 16px; border: none; border-radius: 12px; cursor: pointer;
+  background: rgba(255, 255, 255, 0.94); color: #16181D;
+  -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px);
+  font-family: 'Inter', sans-serif; font-size: 15px; font-weight: 600; white-space: nowrap;
+  box-shadow: 0 4px 14px rgba(20, 20, 40, 0.18);
+  transition: transform 0.15s, box-shadow 0.15s, background 0.15s, color 0.15s;
+}
+.bulk-datebtn svg { color: #6B7280; flex-shrink: 0; }
+/* prominent hover on a valid field (error fields keep their red ring) */
+.bulk-datebtn:not(.bulk-datebtn-error):hover {
+  background: #fff; transform: translateY(-2px);
+  box-shadow: 0 12px 30px rgba(20, 20, 40, 0.32);
+}
+.bulk-datebtn:not(.bulk-datebtn-error):hover svg { color: #16181D; }
+/* invalid: this day can't hold the photo -> red field */
+.bulk-datebtn-error { background: #FDE7E7; color: #C2361B; box-shadow: 0 0 0 2px #E5484D, 0 4px 14px rgba(20, 20, 40, 0.18); }
+.bulk-datebtn-error svg { color: #C2361B; }
+
+.bulk-error { font-family: 'Inter', sans-serif; font-size: 13px; font-weight: 600; color: #C2361B; text-align: center; margin: 0; }
+
+.bulk-add {
+  height: 44px; padding: 0 24px; border: none; border-radius: 999px;
+  background: #16181D; color: #fff; cursor: pointer;
+  font-family: 'Inter', sans-serif; font-size: 15px; font-weight: 600; transition: background 0.15s, opacity 0.15s;
+}
+.bulk-add:hover:not(:disabled) { background: #2C2F38; }
+.bulk-add:disabled { opacity: 0.4; cursor: default; }
+
+/* right slot of the nav when signed in: bulk-upload button + profile avatar */
+.nav-right { display: flex; align-items: center; gap: 14px; }
+.nav-bulk {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 7px 12px; border: none; border-radius: 20px; cursor: pointer;
+  background: #F1F1EF; color: #4A5160;
+  font-family: 'Inter', sans-serif; font-size: 13px; font-weight: 500;
+  transition: background 0.15s, color 0.15s;
+}
+.nav-bulk:hover { background: #E8EAED; color: #16181D; }
+.nav-bulk svg { flex-shrink: 0; }
+
 .nav-brand {
   font-family: 'Neulis', 'Helvetica Neue', Helvetica, Arial, sans-serif;
   font-size: 22px; font-weight: 600; letter-spacing: 0.01em; color: #16181D;
@@ -336,7 +423,7 @@ body {
 
 .cmp-add-wrap { position: relative; margin-top: 2px; }
 .cmp-add {
-  height: 48px; width: 100%; border: none; border-radius: 14px;
+  height: 48px; width: 100%; border: none; border-radius: 999px;
   background: #16181D; color: #fff; cursor: pointer;
   font-family: inherit; font-size: 15px; font-weight: 600;
   transition: background 0.15s, opacity 0.15s;
@@ -354,7 +441,7 @@ body {
 .cmp-add:disabled { opacity: 0.4; cursor: default; }
 
 /* ---- custom calendar popover ---- */
-.cal-backdrop { position: fixed; inset: 0; z-index: 95; }
+.cal-backdrop { position: fixed; inset: 0; z-index: 10001; } /* above the dock AND the bulk modal (10000) */
 .cal-pop {
   position: fixed; /* left / width / bottom set inline to anchor above the date field */
   background: #fff; border-radius: 18px; padding: 14px 14px 20px;

@@ -52,7 +52,7 @@ export const currentYearMonths = (today = new Date()) => {
   return out
 }
 
-const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
+export const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
 const MONTHS_SHORT = MONTHS.map((m) => m.slice(0, 3))
 
 export const cardDateLabel = (iso) => {

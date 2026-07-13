@@ -2,13 +2,14 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { flushSync } from 'react-dom'
 import { AnimatePresence, LayoutGroup, animate, motion, motionValue, useMotionValue } from 'framer-motion'
 import { SWIFT, LIQUID } from './anim.js'
-import MemoryCard from './MemoryCard.jsx'
+import MemoryCard, { Icon } from './MemoryCard.jsx'
 import YearOrbit from './YearOrbit.jsx'
 import Lightbox from './Lightbox.jsx'
 import Composer from './Composer.jsx'
+import BulkUploader from './BulkUploader.jsx'
 import { supabase, userProfile } from './supabase.js'
 import { loadMemories, saveMemories, saveImageMedia, cachePreview, deleteImage, randomColorKey } from './store.js'
-import { kindFromMime, MAX_SAFE_BYTES, seedFrac } from './media.js'
+import { kindFromMime, MAX_SAFE_BYTES, seedFrac, icons } from './media.js'
 import { ZOOMS, markerLabel, toISO, fromISO, unitStart, currentMonthDays, currentYearMonths } from './time.js'
 
 const MARKER_H = 130 // px reserved at top for date markers
@@ -55,6 +56,7 @@ const CARD_SETTLE = { type: 'tween', duration: 0.13, ease: [0.25, 1, 0.5, 1] }
 // of the viewport (below the dock). Days show everything.
 const MONTHS_VIEW_MAX = 3
 const DAY_MAX = 4 // most memories allowed on a single day
+const IMAGES_PER_CARD = 4 // a single card holds up to this many images
 const byDate = (a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0)
 
 // Seeded ONCE per page load (module scope = never re-rolls on an App re-render).
@@ -133,9 +135,10 @@ const MenuIcon = ({ name }) => (
 
 // Persistent top nav across the whole product. Right slot: a profile avatar
 // (opens the account menu) when signed in, else the "Login" CTA.
-function TopNav({ session, profile, onSignIn, onSignOut }) {
+function TopNav({ session, profile, onSignIn, onSignOut, onBulkPick }) {
   const [menuOpen, setMenuOpen] = useState(false)
   const accountRef = useRef(null)
+  const bulkInputRef = useRef(null)
   // close the menu on an outside click or Escape
   useEffect(() => {
     if (!menuOpen) return
@@ -150,6 +153,23 @@ function TopNav({ session, profile, onSignIn, onSignOut }) {
     <div className="top-nav">
       <span className="nav-brand">Nami</span>
       {session ? (
+        <div className="nav-right">
+          <button className="nav-bulk" onClick={() => bulkInputRef.current?.click()}>
+            <Icon d={icons.upload} size={16} />
+            Bulk upload
+          </button>
+          <input
+            ref={bulkInputRef}
+            type="file"
+            accept="image/*"
+            multiple
+            hidden
+            onChange={(e) => {
+              const picked = [...e.target.files]
+              e.target.value = '' // allow re-picking the same files
+              if (picked.length) onBulkPick(picked)
+            }}
+          />
         <div className="nav-account" ref={accountRef}>
           <button
             className="nav-avatar"
@@ -195,6 +215,7 @@ function TopNav({ session, profile, onSignIn, onSignOut }) {
             )}
           </AnimatePresence>
         </div>
+        </div>
       ) : (
         <button className="nav-login" onClick={onSignIn}>
           <svg className="nav-login-logo" width="16" height="16" viewBox="0 0 18 18" aria-hidden="true">
@@ -222,6 +243,7 @@ export default function App() {
   const [openId, setOpenId] = useState(null) // lightbox
   const [composerOpen, setComposerOpen] = useState(false)
   const [composerKey, setComposerKey] = useState(0) // remount composer fresh on each open
+  const [bulkFiles, setBulkFiles] = useState(null) // File[] while the bulk-placement modal is open
   const [toast, setToast] = useState(null) // transient top toast (e.g. day-full); auto-dismisses
   const toastTimer = useRef(null)
   useEffect(() => () => clearTimeout(toastTimer.current), [])
@@ -921,7 +943,7 @@ export default function App() {
     setMemories((ms) => ms.map((m) => (m.id === id ? { ...m, warnLarge: tooLarge } : m)))
 
     const existingImgs = memories?.find((m) => m.id === id)?.media?.filter((x) => x.kind === 'image').length || 0
-    let imgRoom = 4 - existingImgs // cap images at 4
+    let imgRoom = IMAGES_PER_CARD - existingImgs // cap images per card
     for (const { file, kind } of accepted) {
       if (kind === 'image') {
         if (imgRoom <= 0) continue
@@ -955,9 +977,43 @@ export default function App() {
     if (zoom.id === 'years') return // orbit view: no drop target
     const files = [...(e.dataTransfer?.files || [])]
     if (!files.length) return
+    // multiple images at once -> full-screen placement flow (assign a date each);
+    // a single file (or a non-image drop) keeps the existing quick-add behaviour
+    const imgs = files.filter((f) => kindFromMime(f.type) === 'image')
+    if (imgs.length > 1) { setBulkFiles(imgs); return }
     const card = blankCard(anchorDate())
     setMemories((ms) => [...ms, card])
     attachFiles(card.id, files)
+  }
+
+  // How many more images a given day can hold: (free cards) x IMAGES_PER_CARD.
+  // Single source for both the uploader's live validation and the commit below.
+  const imageRoomFor = useCallback(
+    (date) => Math.max(0, DAY_MAX - (memories?.filter((m) => m.date === date).length || 0)) * IMAGES_PER_CARD,
+    [memories],
+  )
+
+  // Commit the bulk-placement modal: photos sharing a date are GROUPED onto one
+  // card (chunked to the IMAGES_PER_CARD cap), and a day never exceeds DAY_MAX
+  // cards; any photos beyond a day's capacity are skipped and flagged.
+  const handleBulkCommit = (assignments) => {
+    const byDate = new Map()
+    for (const { file, date } of assignments) {
+      if (!byDate.has(date)) byDate.set(date, [])
+      byDate.get(date).push(file)
+    }
+    let skipped = 0
+    for (const [date, dateFiles] of byDate) {
+      const place = dateFiles.slice(0, imageRoomFor(date)) // respects DAY_MAX cards x IMAGES_PER_CARD
+      skipped += dateFiles.length - place.length
+      for (let i = 0; i < place.length; i += IMAGES_PER_CARD) {
+        const card = blankCard(date)
+        setMemories((ms) => [...ms, card])
+        attachFiles(card.id, place.slice(i, i + IMAGES_PER_CARD))
+      }
+    }
+    setBulkFiles(null)
+    if (skipped) showToast("Some photos weren't added. Those days were full.")
   }
 
   useEffect(() => {
@@ -1245,10 +1301,39 @@ export default function App() {
         profile={profile}
         onSignIn={signInWithGoogle}
         onSignOut={handleSignOut}
+        onBulkPick={setBulkFiles}
       />
 
       <AnimatePresence>
         {openCard && <Lightbox key={openCard.id} m={openCard} onClose={() => setOpenId(null)} />}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {bulkFiles && (
+          <BulkUploader
+            files={bulkFiles}
+            onClose={() => setBulkFiles(null)}
+            onCommit={handleBulkCommit}
+            capacityFor={imageRoomFor}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* top toast for messages shown while the composer is closed (e.g. the
+          bulk "some days were full" notice); the composer shows its own toast
+          above the CTA when open */}
+      <AnimatePresence>
+        {toast && !composerOpen && (
+          <motion.div
+            className="toast"
+            initial={{ opacity: 0, y: -12, x: '-50%' }}
+            animate={{ opacity: 1, y: 0, x: '-50%' }}
+            exit={{ opacity: 0, y: -12, x: '-50%' }}
+            transition={{ type: 'spring', stiffness: 420, damping: 34 }}
+          >
+            {toast}
+          </motion.div>
+        )}
       </AnimatePresence>
     </div>
   )
