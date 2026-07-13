@@ -90,7 +90,7 @@ export default function BulkUploader({ files, onClose, onCommit, capacityFor }) 
           spaceBetween={0}
           coverflowEffect={{ rotate: 40, stretch: 0, depth: 100, modifier: 1, slideShadows: true }}
           keyboard={{ enabled: true }}
-          mousewheel={{ forceToAxis: true }}
+          mousewheel={{ forceToAxis: false }}
           pagination={{ clickable: true }}
           modules={[EffectCoverflow, Pagination, Keyboard, Mousewheel]}
           onSwiper={(s) => { swiperRef.current = s }}
