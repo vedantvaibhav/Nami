@@ -116,7 +116,7 @@ body {
 .bulk-error { font-family: 'Inter', sans-serif; font-size: 13px; font-weight: 600; color: #C2361B; text-align: center; margin: 0; }
 
 .bulk-add {
-  height: 44px; padding: 0 24px; border: none; border-radius: 12px;
+  height: 44px; padding: 0 24px; border: none; border-radius: 999px;
   background: #16181D; color: #fff; cursor: pointer;
   font-family: 'Inter', sans-serif; font-size: 15px; font-weight: 600; transition: background 0.15s, opacity 0.15s;
 }
@@ -423,7 +423,7 @@ body {
 
 .cmp-add-wrap { position: relative; margin-top: 2px; }
 .cmp-add {
-  height: 48px; width: 100%; border: none; border-radius: 14px;
+  height: 48px; width: 100%; border: none; border-radius: 999px;
   background: #16181D; color: #fff; cursor: pointer;
   font-family: inherit; font-size: 15px; font-weight: 600;
   transition: background 0.15s, opacity 0.15s;
