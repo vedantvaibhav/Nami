@@ -42,8 +42,13 @@ export default function BulkUploader({ files, onClose, onCommit, capacityFor }) 
     return () => window.removeEventListener('keydown', onKey)
   }, [calAnchor, onClose])
 
-  const batchOn = (d) => dates.filter((x) => x === d).length
-  const overCap = (d) => batchOn(d) > capacityFor(d)
+  // how many photos in THIS batch land on each date (recomputed only when dates change)
+  const batchCounts = useMemo(() => {
+    const m = {}
+    for (const d of dates) m[d] = (m[d] || 0) + 1
+    return m
+  }, [dates])
+  const overCap = (d) => (batchCounts[d] || 0) > capacityFor(d)
   const currentInvalid = overCap(dates[current])
   const anyInvalid = dates.some((d) => overCap(d))
 

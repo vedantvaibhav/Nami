@@ -56,6 +56,7 @@ const CARD_SETTLE = { type: 'tween', duration: 0.13, ease: [0.25, 1, 0.5, 1] }
 // of the viewport (below the dock). Days show everything.
 const MONTHS_VIEW_MAX = 3
 const DAY_MAX = 4 // most memories allowed on a single day
+const IMAGES_PER_CARD = 4 // a single card holds up to this many images
 const byDate = (a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0)
 
 // Seeded ONCE per page load (module scope = never re-rolls on an App re-render).
@@ -942,7 +943,7 @@ export default function App() {
     setMemories((ms) => ms.map((m) => (m.id === id ? { ...m, warnLarge: tooLarge } : m)))
 
     const existingImgs = memories?.find((m) => m.id === id)?.media?.filter((x) => x.kind === 'image').length || 0
-    let imgRoom = 4 - existingImgs // cap images at 4
+    let imgRoom = IMAGES_PER_CARD - existingImgs // cap images per card
     for (const { file, kind } of accepted) {
       if (kind === 'image') {
         if (imgRoom <= 0) continue
@@ -985,9 +986,16 @@ export default function App() {
     attachFiles(card.id, files)
   }
 
+  // How many more images a given day can hold: (free cards) x IMAGES_PER_CARD.
+  // Single source for both the uploader's live validation and the commit below.
+  const imageRoomFor = useCallback(
+    (date) => Math.max(0, DAY_MAX - (memories?.filter((m) => m.date === date).length || 0)) * IMAGES_PER_CARD,
+    [memories],
+  )
+
   // Commit the bulk-placement modal: photos sharing a date are GROUPED onto one
-  // card (chunked to the 4-images-per-card cap), and a day never exceeds DAY_MAX
-  // cards — any photos beyond a day's capacity are skipped and flagged.
+  // card (chunked to the IMAGES_PER_CARD cap), and a day never exceeds DAY_MAX
+  // cards; any photos beyond a day's capacity are skipped and flagged.
   const handleBulkCommit = (assignments) => {
     const byDate = new Map()
     for (const { file, date } of assignments) {
@@ -996,13 +1004,12 @@ export default function App() {
     }
     let skipped = 0
     for (const [date, dateFiles] of byDate) {
-      const roomCards = Math.max(0, DAY_MAX - ((memories?.filter((m) => m.date === date).length) || 0))
-      const place = dateFiles.slice(0, roomCards * 4) // a day holds up to DAY_MAX cards x 4 images
+      const place = dateFiles.slice(0, imageRoomFor(date)) // respects DAY_MAX cards x IMAGES_PER_CARD
       skipped += dateFiles.length - place.length
-      for (let i = 0; i < place.length; i += 4) {
+      for (let i = 0; i < place.length; i += IMAGES_PER_CARD) {
         const card = blankCard(date)
         setMemories((ms) => [...ms, card])
-        attachFiles(card.id, place.slice(i, i + 4))
+        attachFiles(card.id, place.slice(i, i + IMAGES_PER_CARD))
       }
     }
     setBulkFiles(null)
@@ -1307,7 +1314,7 @@ export default function App() {
             files={bulkFiles}
             onClose={() => setBulkFiles(null)}
             onCommit={handleBulkCommit}
-            capacityFor={(date) => Math.max(0, DAY_MAX - ((memories?.filter((m) => m.date === date).length) || 0)) * 4}
+            capacityFor={imageRoomFor}
           />
         )}
       </AnimatePresence>

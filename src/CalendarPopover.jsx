@@ -1,11 +1,10 @@
 import { useState } from 'react'
 import { createPortal } from 'react-dom'
 import { motion } from 'framer-motion'
-import { toISO, fromISO } from './time.js'
+import { toISO, fromISO, MONTHS } from './time.js'
 import { icons } from './media.js'
 import { Icon } from './MemoryCard.jsx'
 
-export const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
 const WEEKDAYS = ['S', 'M', 'T', 'W', 'T', 'F', 'S']
 
 export const prettyDate = (iso) => {
