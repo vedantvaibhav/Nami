@@ -136,7 +136,7 @@ const MemoryCard = forwardRef(function MemoryCard({
   // `getDragBounds(id)` is called once per gesture (at the drag threshold) so
   // no per-render DOM reads are needed to keep the drag clamped on-screen.
   manual = false, manualY = 0, yMV, getDragBounds, instantLayout = false,
-  onDragStart, onDragEnd, onDragCancel,
+  onDragStart, onDragMove, onDragEnd, onDragCancel,
   onDelete, onEdit, onOpen,
 }, ref) {
   const type = inferType(m)
@@ -173,7 +173,9 @@ const MemoryCard = forwardRef(function MemoryCard({
     }
     // clamp live so the card physically can't leave the visible band
     const b = s.bounds
-    yMV.set(b ? Math.min(Math.max(dy, b.top), b.bottom) : dy)
+    const clamped = b ? Math.min(Math.max(dy, b.top), b.bottom) : dy
+    yMV.set(clamped)
+    onDragMove?.(m.id, clamped) // let App shove column-mates out of the way live
   }
   const endDrag = (e) => {
     const s = gestureRef.current

@@ -175,13 +175,13 @@ export default function Composer({ active, defaultDate, editing, onClose, onAdd,
         <AnimatePresence>
           {notice && (
             <motion.div
-              className="cmp-toast"
+              className={`cmp-toast cmp-toast-${notice.level}`}
               initial={{ opacity: 0, y: 8, scale: 0.96 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: 8, scale: 0.97 }}
               transition={{ type: 'spring', stiffness: 460, damping: 34 }}
             >
-              {notice}
+              {notice.msg}
             </motion.div>
           )}
         </AnimatePresence>
