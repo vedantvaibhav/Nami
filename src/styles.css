@@ -52,11 +52,15 @@ body {
 .toast {
   position: fixed; top: 76px; left: 50%; z-index: 9998;
   padding: 10px 18px; border-radius: 999px;
-  background: #16181D; color: #fff;
+  background: #16181D; color: #B7BCC6; /* grey = general (default) */
   font-family: 'Inter', sans-serif; font-size: 14px; font-weight: 500; letter-spacing: -0.005em;
-  box-shadow: 0 10px 30px rgba(20,20,40,0.22), 0 2px 6px rgba(20,20,40,0.12);
+  box-shadow: 0 6px 18px rgba(0,0,0,0.18);
   white-space: nowrap; pointer-events: none;
 }
+/* toast severity: yellow warns, red is a hard/blocking stop, grey is general */
+.toast-warn, .cmp-toast-warn { color: #F5C24B; }
+.toast-error, .cmp-toast-error { color: #FF6B6B; }
+.toast-info, .cmp-toast-info { color: #B7BCC6; }
 
 /* ---- bulk photo placement (full-screen white takeover, coverflow deck) ---- */
 .bulk-backdrop {
@@ -428,13 +432,15 @@ body {
   font-family: inherit; font-size: 15px; font-weight: 600;
   transition: background 0.15s, opacity 0.15s;
 }
-/* transient warning toast, floated just above the Add CTA */
+/* transient toast, floated just above the Add CTA. Black fill; text colour
+   carries the severity (grey general / yellow warn / red blocking) — see the
+   .cmp-toast-* / .toast-* rules near .toast */
 .cmp-toast {
   position: absolute; bottom: calc(100% + 8px); left: 0; right: 0;
   padding: 9px 14px; border-radius: 12px; text-align: center;
-  background: #FDE7D3; color: #C2570B; /* soft peach warning, stands out over the dark CTA */
+  background: #16181D; color: #B7BCC6;
   font-family: inherit; font-size: 13px; font-weight: 600; letter-spacing: -0.005em;
-  box-shadow: 0 8px 22px rgba(20,20,40,0.16), 0 1px 3px rgba(20,20,40,0.08);
+  box-shadow: 0 6px 18px rgba(0,0,0,0.18);
   pointer-events: none;
 }
 .cmp-add:hover:not(:disabled) { background: #2C2F38; }

@@ -55,8 +55,12 @@ const CARD_SETTLE = { type: 'tween', duration: 0.13, ease: [0.25, 1, 0.5, 1] }
 // column to at most a few cards — otherwise a busy month stacks past the bottom
 // of the viewport (below the dock). Days show everything.
 const MONTHS_VIEW_MAX = 3
-const DAY_MAX = 4 // most memories allowed on a single day
+const DAY_MAX = 4 // most memories allowed on a single day (governs the bulk-upload capacity)
 const IMAGES_PER_CARD = 4 // a single card holds up to this many images
+// Per-day content-type rule (composer): a memory counts as an "image memory" if
+// its media has any image; everything else (a note or a bare quote) is a
+// note/quote memory. A day allows at most 2 image memories + 1 note/quote.
+const isImageMemory = (mediaArr) => mediaArr?.some((x) => x.kind === 'image')
 const byDate = (a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0)
 
 // Seeded ONCE per page load (module scope = never re-rolls on an App re-render).
@@ -244,11 +248,13 @@ export default function App() {
   const [composerOpen, setComposerOpen] = useState(false)
   const [composerKey, setComposerKey] = useState(0) // remount composer fresh on each open
   const [bulkFiles, setBulkFiles] = useState(null) // File[] while the bulk-placement modal is open
-  const [toast, setToast] = useState(null) // transient top toast (e.g. day-full); auto-dismisses
+  // transient toast, { msg, level } where level is 'info' (grey), 'warn'
+  // (yellow) or 'error' (red). Auto-dismisses. Black fill; text colour = level.
+  const [toast, setToast] = useState(null)
   const toastTimer = useRef(null)
   useEffect(() => () => clearTimeout(toastTimer.current), [])
-  const showToast = (msg) => {
-    setToast(msg)
+  const showToast = (msg, level = 'info') => {
+    setToast({ msg, level })
     clearTimeout(toastTimer.current)
     toastTimer.current = setTimeout(() => setToast(null), 3500)
   }
@@ -719,32 +725,84 @@ export default function App() {
     ))
   }, [])
 
-  // Commit a drag: free vertical placement with a GENTLE magnetic snap so the
-  // card abuts a neighbour (sits just above/below it, never aligned-on-top),
-  // clamped on-screen, then PUSH any overlapped neighbour out of the way (cascading)
-  // so cards can NEVER cover each other. offsetY is the pointer's clamped offset at
-  // drop; we move it into pos[view] and slide yMV → 0 (fast tween — cannot bounce).
+  // --- drag geometry (shared by the LIVE push + the drop commit) -----------
+  // The dragged card's column-mates as { id, from, hh }. `from` is each card's
+  // HOME top (its live offsetTop — layout position, unaffected by the transient
+  // yMV transform, so it stays put for the whole gesture) and `hh` its height.
+  // Read from the LIVE DOM so it's correct on a column's first drag and with
+  // freshly-loaded image heights.
+  const gatherOthers = (id) => {
+    const v = view2dRef.current
+    const out = []
+    for (const it of colItemsFor(id)) {
+      if (it.id === id) continue
+      const from = cardRefs.current.get(it.id)?.offsetTop ?? it.pos?.[v]
+      if (from == null) continue
+      out.push({ id: it.id, from, hh: cardHeight(it.id) })
+    }
+    return out
+  }
+
+  // Resolve where each column-mate must sit so none overlaps the dragged card at
+  // top `y` (height `h`): a card keeps its home top UNLESS the drag would cover
+  // it, in which case it's shoved just clear — down if it sits below the drag's
+  // midpoint, up if above — and the shove cascades to that card's own
+  // neighbours. Pure geometry, no state writes: returns Map(cardId -> targetTop).
+  const resolvePush = (y, h, others) => {
+    const dragMid = y + h / 2
+    const below = others.filter((o) => o.from + o.hh / 2 >= dragMid).sort((a, b) => a.from - b.from)
+    const above = others.filter((o) => o.from + o.hh / 2 < dragMid).sort((a, b) => b.from - a.from)
+    const tops = new Map()
+    let floor = y + h + MIN_GAP // lowest top the next card-down may take
+    for (const o of below) {
+      const t = Math.min(Math.max(o.from, floor), maxTopFor(o.id))
+      tops.set(o.id, t)
+      floor = t + o.hh + MIN_GAP
+    }
+    let ceil = y - MIN_GAP // highest bottom the next card-up may take
+    for (const o of above) {
+      const t = Math.max(Math.min(o.from, ceil - o.hh), 0)
+      tops.set(o.id, t)
+      ceil = t - MIN_GAP
+    }
+    return tops
+  }
+
+  // LIVE reflow (fires every pointermove of a drag): shove any column-mate the
+  // dragged card now overlaps out of the way, and let them slide back home when
+  // it moves off, by writing each neighbour's TRANSIENT yMV directly (tracks the
+  // pointer, same as the dragged card — smooth, no re-render). No pos commit here
+  // — that happens once, on drop.
+  const onCardDragMove = useCallback((id, offsetY) => {
+    const v = view2dRef.current
+    const base = memoriesRef.current?.find((m) => m.id === id)?.pos?.[v] ?? 0
+    const h = cardHeight(id)
+    const y = Math.min(Math.max(0, base + offsetY), maxTopFor(id))
+    const others = gatherOthers(id)
+    const tops = resolvePush(y, h, others)
+    for (const o of others) {
+      const to = tops.has(o.id) ? tops.get(o.id) : o.from
+      cardYMV(o.id).set(to - o.from) // 0 when this card isn't in the way
+    }
+  }, [cardYMV])
+
+  // Commit a drag: gentle magnetic snap so the card abuts a neighbour (never
+  // aligned-on-top), clamped on-screen, then the SAME push cascade as the live
+  // reflow so cards can NEVER cover each other. offsetY is the pointer's clamped
+  // offset at drop; we move every affected card into pos[view] and glide its yMV
+  // → 0 from exactly where it sits RIGHT NOW — so a neighbour the live push
+  // already displaced slides to its final spot instead of teleporting. Fast
+  // tween, cannot bounce.
   const commitDrag = useCallback((id, offsetY) => {
     const v = view2dRef.current
     const base = memoriesRef.current?.find((m) => m.id === id)?.pos?.[v] ?? 0
     const raw = base + offsetY // where the card actually is at drop
     const h = cardHeight(id)
     const maxTop = maxTopFor(id)
+    const others = gatherOthers(id)
 
-    // other cards in this column/view — read from the LIVE DOM (offsetTop/
-    // offsetHeight), not stale state, so placement holds on a column's very first
-    // drag and with freshly-loaded image heights.
-    const others = []
-    for (const it of colItemsFor(id)) {
-      if (it.id === id) continue
-      const from = cardRefs.current.get(it.id)?.offsetTop ?? it.pos?.[v]
-      if (from == null) continue
-      others.push({ id: it.id, from, hh: cardHeight(it.id) })
-    }
-
-    // gentle magnetic snap: if the drop lands within SNAP_THRESHOLD of the column
-    // top or of ABUTTING a neighbour (just above / just below, with MIN_GAP of
-    // breathing room), click to that tidy position.
+    // gentle magnetic snap to the column top or to ABUTTING a neighbour (just
+    // above / just below, with MIN_GAP of breathing room).
     const near = others.flatMap((o) => [o.from + o.hh + MIN_GAP, o.from - h - MIN_GAP])
     let y = raw
     let best = null
@@ -755,40 +813,24 @@ export default function App() {
     if (best) y = best.a
     y = Math.min(Math.max(0, y), maxTop) // never off-screen / under the dock
 
-    // PUSH, don't bounce. The dragged card stays where you let go; any neighbour
-    // it now overlaps moves OUT OF THE WAY — down if it sits below the drop, up if
-    // above — and the shove cascades to that card's own neighbours. (The old logic
-    // relocated the DRAGGED card to a free slot, which is exactly what made a drop
-    // feel "stuck" — you couldn't drop a card where another one already was.)
-    const dragMid = y + h / 2
-    const below = others.filter((o) => o.from + o.hh / 2 >= dragMid).sort((a, b) => a.from - b.from)
-    const above = others.filter((o) => o.from + o.hh / 2 < dragMid).sort((a, b) => b.from - a.from)
-    // each entry holds { from: where the card is now, to: its resolved top }, so
-    // the glide loop below needs no second lookup.
-    const tops = new Map([[id, { from: raw, to: y }]])
-    let floor = y + h + MIN_GAP // lowest top the next card-down may take
-    for (const o of below) {
-      const t = Math.min(Math.max(o.from, floor), maxTopFor(o.id))
-      tops.set(o.id, { from: o.from, to: t })
-      floor = t + o.hh + MIN_GAP
-    }
-    let ceil = y - MIN_GAP // highest bottom the next card-up may take
-    for (const o of above) {
-      const t = Math.max(Math.min(o.from, ceil - o.hh), 0)
-      tops.set(o.id, { from: o.from, to: t })
-      ceil = t - MIN_GAP
+    const tops = resolvePush(y, h, others)
+    tops.set(id, y)
+
+    // snapshot each moved card's CURRENT visual top (home offsetTop + its live
+    // transient offset) BEFORE flushSync mutates pos (which changes offsetTop),
+    // so the settle glide starts from where the card visually is this frame.
+    const startVisual = new Map()
+    for (const cid of tops.keys()) {
+      const home = cardRefs.current.get(cid)?.offsetTop ?? tops.get(cid)
+      startVisual.set(cid, home + cardYMV(cid).get())
     }
 
-    // commit every moved card's top SYNCHRONOUSLY (flushSync), then glide each from
-    // where it was to its new top via the transient yMV offset — the same one-frame
-    // mechanism the dragged card uses, so pushed neighbours slide rather than
-    // teleport. Same-frame top+offset avoids the one-frame flash (the "glitch").
     flushSync(() => setMemories((ms) => ms.map((m) =>
-      tops.has(m.id) ? { ...m, pos: { ...(m.pos || {}), [v]: tops.get(m.id).to } } : m
+      tops.has(m.id) ? { ...m, pos: { ...(m.pos || {}), [v]: tops.get(m.id) } } : m
     )))
-    for (const [cid, { from, to }] of tops) {
+    for (const [cid, to] of tops) {
       const mv = cardYMV(cid)
-      mv.set(from - to)
+      mv.set(startVisual.get(cid) - to) // continuous with the live push — no jump
       animate(mv, 0, CARD_SETTLE)
     }
     navigator.vibrate?.(8) // silent haptic tick on supported devices — no audio
@@ -802,6 +844,11 @@ export default function App() {
     dragActive.current = false
     const mv = yMVs.current.get(id)
     if (mv) animate(mv, 0, CARD_SETTLE)
+    // release any neighbours the live push had shoved aside
+    for (const o of gatherOthers(id)) {
+      const omv = yMVs.current.get(o.id)
+      if (omv) animate(omv, 0, CARD_SETTLE)
+    }
   }, [])
 
   // commit render-computed fallback tops into pos[view] so cards added to a
@@ -853,10 +900,18 @@ export default function App() {
       // editing in place — never counts against the per-day limit, always allowed
       setMemories((ms) => ms.map((m) => (m.id === editId ? { ...m, type, title, body, date, media: media || [], color } : m)))
     } else {
-      // new memory — cap each day at 4. If full, reject WITHOUT closing (the
-      // composer keeps its form + open state) and flag it with a top toast.
-      if (memories.filter((m) => m.date === date).length >= DAY_MAX) {
-        showToast('This day is full. Pick a different date.')
+      // new memory — content-type-aware per-day cap: at most 2 image memories
+      // and 1 note/quote memory per day. If the relevant slot is full, reject
+      // WITHOUT closing (the composer keeps its form + open state) and flag it
+      // with a toast. Editing (the branch above) is always allowed.
+      const dayMemories = memories.filter((m) => m.date === date)
+      const addingImage = isImageMemory(media)
+      if (addingImage && dayMemories.filter((m) => isImageMemory(m.media)).length >= 2) {
+        showToast('This day already has 2 photos. Add a note instead.', 'warn')
+        return
+      }
+      if (!addingImage && dayMemories.filter((m) => !isImageMemory(m.media)).length >= 1) {
+        showToast('This day already has a note. Add a photo instead.', 'warn')
         return
       }
       setToast(null)
@@ -1013,7 +1068,7 @@ export default function App() {
       }
     }
     setBulkFiles(null)
-    if (skipped) showToast("Some photos weren't added. Those days were full.")
+    if (skipped) showToast("Some photos weren't added. Those days were full.", 'warn')
   }
 
   useEffect(() => {
@@ -1159,6 +1214,7 @@ export default function App() {
                       instantLayout={dragActive.current}
                       getDragBounds={getDragBounds}
                       onDragStart={onCardDragStart}
+                      onDragMove={onCardDragMove}
                       onDragEnd={commitDrag}
                       onDragCancel={cancelCardDrag}
                       onDelete={removeMemory}
@@ -1325,13 +1381,13 @@ export default function App() {
       <AnimatePresence>
         {toast && !composerOpen && (
           <motion.div
-            className="toast"
+            className={`toast toast-${toast.level}`}
             initial={{ opacity: 0, y: -12, x: '-50%' }}
             animate={{ opacity: 1, y: 0, x: '-50%' }}
             exit={{ opacity: 0, y: -12, x: '-50%' }}
             transition={{ type: 'spring', stiffness: 420, damping: 34 }}
           >
-            {toast}
+            {toast.msg}
           </motion.div>
         )}
       </AnimatePresence>
