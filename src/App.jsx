@@ -55,8 +55,12 @@ const CARD_SETTLE = { type: 'tween', duration: 0.13, ease: [0.25, 1, 0.5, 1] }
 // column to at most a few cards — otherwise a busy month stacks past the bottom
 // of the viewport (below the dock). Days show everything.
 const MONTHS_VIEW_MAX = 3
-const DAY_MAX = 4 // most memories allowed on a single day
+const DAY_MAX = 4 // most memories allowed on a single day (governs the bulk-upload capacity)
 const IMAGES_PER_CARD = 4 // a single card holds up to this many images
+// Per-day content-type rule (composer): a memory counts as an "image memory" if
+// its media has any image; everything else (a note or a bare quote) is a
+// note/quote memory. A day allows at most 2 image memories + 1 note/quote.
+const isImageMemory = (mediaArr) => mediaArr?.some((x) => x.kind === 'image')
 const byDate = (a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0)
 
 // Seeded ONCE per page load (module scope = never re-rolls on an App re-render).
@@ -853,10 +857,18 @@ export default function App() {
       // editing in place — never counts against the per-day limit, always allowed
       setMemories((ms) => ms.map((m) => (m.id === editId ? { ...m, type, title, body, date, media: media || [], color } : m)))
     } else {
-      // new memory — cap each day at 4. If full, reject WITHOUT closing (the
-      // composer keeps its form + open state) and flag it with a top toast.
-      if (memories.filter((m) => m.date === date).length >= DAY_MAX) {
-        showToast('This day is full. Pick a different date.')
+      // new memory — content-type-aware per-day cap: at most 2 image memories
+      // and 1 note/quote memory per day. If the relevant slot is full, reject
+      // WITHOUT closing (the composer keeps its form + open state) and flag it
+      // with a toast. Editing (the branch above) is always allowed.
+      const dayMemories = memories.filter((m) => m.date === date)
+      const addingImage = isImageMemory(media)
+      if (addingImage && dayMemories.filter((m) => isImageMemory(m.media)).length >= 2) {
+        showToast('This day already has 2 photos. Add a note instead.')
+        return
+      }
+      if (!addingImage && dayMemories.filter((m) => !isImageMemory(m.media)).length >= 1) {
+        showToast('This day already has a note. Add a photo instead.')
         return
       }
       setToast(null)
